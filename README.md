@@ -42,7 +42,7 @@ Checkpoints are numbered 1 through 12 by default in the HUD (indices 0 through 1
 
 With a saved best, the delta beside the lap time updates at each accepted gate and at the finish: current lap-clock time minus the corresponding best split or duration. Negative values are green (ahead), positive values red (behind), and zero white; all show a sign and three decimals, such as **-0.142** or **+0.312**. Each value remains solid for two seconds, fades over the third, and is replaced by the next crossing or cleared on reset. The finish compares against the previous best before a faster lap replaces it. No saved best means no delta, including the first finish.
 
-Save format **5** stores gameplay version and track ID (`suzuka`) with checkpoint splits. Missing or mismatched metadata discards the saved lap and ghost quietly, including format-4 records. A new valid lap can replace an incompatible record regardless of its old time.
+Save format **6** stores gameplay version and track ID (`suzuka`) with checkpoint splits. Missing or mismatched metadata discards the saved lap and ghost quietly, including format-5 records. A new valid lap can replace an incompatible record regardless of its old time.
 
 The ghost is hidden before the start and when there is no valid best lap. It replays the previous best on the current lap clock and remains at its final pose if the current attempt takes longer. A new best becomes the replay on the next reset. Lap timing and trigger detection use Unity's fixed physics steps; they do not estimate sub-step crossing times.
 
@@ -89,7 +89,7 @@ Core and its EditMode test assembly have `noEngineReferences: true`. Game refere
 
 **SolidSprite** uses `[ExecuteAlways]` to create a rectangle from `Texture2D.whiteTexture`. It applies Inspector color, world-unit size, and sorting order, preserves the SpriteRenderer's material, recreates sprites after scene loading, and releases each generated sprite when disabled. Size controls the object's local scale; use unit-sized BoxCollider2D components.
 
-**CarController** ramps throttle over 0.4 seconds and applies acceleration and proportional drag as Rigidbody2D forces. Terminal speed comes from force/drag balance; Top Speed is the curve reference. Defaults balance near 18 units/s with Drag 0.8, Brake Acceleration 6, and Engine Braking 1.5. The car uses Continuous collision detection. Inspector curves control acceleration and steering with speed. Coasting adds engine braking; S overrides W to brake and reverses near rest. Wall contacts remove the configured incoming-speed fraction. Reset clears input and motion; countdown and finish locking remain intact. Curve evaluation and handling math live in engine-free Core.
+**CarController** ramps throttle over 0.4 seconds and applies acceleration and proportional drag as Rigidbody2D forces. Terminal speed comes from force/drag balance; Top Speed is the curve reference. Defaults balance near 17.1 units/s with Drag 0.85, Brake Acceleration 6, and Engine Braking 1.5. The car uses Continuous collision detection. Inspector curves control acceleration and steering with speed. Coasting adds engine braking; S overrides W to brake and reverses near rest. Wall contacts remove the configured incoming-speed fraction. Reset clears input and motion; countdown and finish locking remain intact. Curve evaluation and handling math live in engine-free Core.
 
 **CameraFollow** smoothly follows the car on the XY plane while keeping camera Z at -10. Reset can snap the camera directly to the spawn position.
 
@@ -147,7 +147,7 @@ Before the Suzuka replacement, a temporary PlayMode smoke test also passed two d
 
 ## Save data
 
-The file is `ghostline-best-lap.json` in `Application.persistentDataPath`, normally `%USERPROFILE%\AppData\LocalLow\DefaultCompany\Ghostline\ghostline-best-lap.json` on Windows. R never deletes it. Format **5** stores version, track ID, splits, duration, and poses. Incompatible versions/tracks and invalid data are ignored. Validation uses the race's configured track identity and checkpoint count.
+The file is `ghostline-best-lap.json` in `Application.persistentDataPath`, normally `%USERPROFILE%\AppData\LocalLow\DefaultCompany\Ghostline\ghostline-best-lap.json` on Windows. R never deletes it. Format **6** stores version, track ID, splits, duration, and poses. Incompatible versions/tracks and invalid data are ignored. Validation uses the race's configured track identity and checkpoint count.
 
 The file's mutable JSON representation is intentionally separate from `GhostSample`: `JsonUtility` serializes fields, while the Core sample exposes readonly properties. A temporary-file write followed by replacement protects the existing save from incomplete writes; write failures retain the previous best and show a warning. No ghost data is uploaded.
 
