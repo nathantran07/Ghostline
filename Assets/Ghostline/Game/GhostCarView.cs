@@ -9,6 +9,9 @@ namespace Ghostline.Game
         private GhostRecording _recording;
         private SpriteRenderer _renderer;
 
+        public bool HasRecording => _recording != null;
+        public float PlaybackDuration => _recording == null ? 0f : _recording.Samples[_recording.Samples.Count - 1].Time;
+
         private void Awake()
         {
             Hide();

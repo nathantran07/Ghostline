@@ -27,6 +27,13 @@ namespace Ghostline.Game
 
         public int CheckpointCount => _session == null ? _checkpointCount : _session.Checkpoints.CheckpointCount;
 
+        public bool ShowGhostOnMinimap => _session != null && _ghost != null && _ghost.isActiveAndEnabled
+            && _ghost.HasRecording && (_session.Timer.State == LapTimerState.NotStarted
+                || (_session.Timer.State == LapTimerState.Running && _session.Timer.ElapsedTime < _ghost.PlaybackDuration));
+
+        public Vector2 GhostMinimapPosition => _session != null && _session.Timer.State == LapTimerState.NotStarted
+            ? _spawnPosition : (_ghost == null ? _spawnPosition : (Vector2)_ghost.transform.position);
+
         public void SetSpawn(Vector2 position, float rotation)
         {
             _spawnPosition = position;
