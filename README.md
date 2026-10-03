@@ -54,7 +54,8 @@ Assets/Ghostline/
   Game/             Ghostline.Game.asmdef; Unity, keyboard, presentation, file adapters
   Tests/EditMode/   Ghostline.Tests.EditMode.asmdef; NUnit tests referencing Core
     Storage/        Ghostline.Tests.Storage.asmdef; Unity JSON adapter tests
-  Editor/           Ghostline.Editor.asmdef; Editor-only scene builder
+  Tests/Scene/      Ghostline.Tests.Scene.asmdef; Editor-only Game/tooling tests
+  Editor/           Ghostline.Editor.asmdef; scene builder and additive minimap installer
 ```
 
 Core and its EditMode test assembly have `noEngineReferences: true`. Game references Core, `Unity.InputSystem`, `Unity.TextMeshPro`, and `UnityEngine.UI`. The nested Storage test assembly references Core and Game so JSON adapter tests can use Unity without adding engine references to Core tests. Tests use the template's Test Framework through `TestAssemblies`; they are Editor-only. Editor references Core, Game, TMP, and UI, and is excluded from players.
@@ -83,6 +84,8 @@ Core and its EditMode test assembly have `noEngineReferences: true`. Game refere
 
 **StartSequence** advances `Counting`, `Go`, and `Done` using supplied ticks, exposes the current label and `DrivingAllowed`, and handles ticks spanning multiple states. Number and GO durations are constructor parameters; reset restarts at 3. It is independent of the lap timer.
 
+**MinimapProjection**, in `Assets/Ghostline/Core/MinimapProjection.cs`, maps `TrackPoint` world bounds into a padded rectangle. `Project` preserves aspect ratio, centers unused space, and returns top-left coordinates with Y flipped; `ProjectClamped` limits positions to the padded rectangle. Point bounds map to the center; a single nonzero axis still scales normally. Invalid dimensions, inverted bounds, nonfinite values, and padding that consumes the rectangle are rejected. Core retains `noEngineReferences: true`.
+
 **NumericGuard** is an internal helper shared by Core classes to enforce finite and nonnegative numeric inputs without depending on Unity's math API.
 
 ### Game classes
@@ -101,6 +104,8 @@ Core and its EditMode test assembly have `noEngineReferences: true`. Game refere
 
 **HudView** renders current time, best time, attempt/checkpoint status, countdown, and delta into five assigned TMP text components. `RenderCountdown`, `ShowDelta`, and `Tick` handle label visibility, invariant signed decimal formatting, colors, and fade timing. It formats presentation but does not decide race outcomes.
 
+**MinimapView**, in `Assets/Ghostline/Game/MinimapView.cs`, reads `TrackGenerator.Samples` at startup, transforms the centerline into world space, and draws a closed line and start/finish tick once into a runtime Texture2D. A bottom-left panel uses 20% of the scaled canvas height. Player and ghost dots update in `LateUpdate` using the same Core projection; resizing scales their coordinates with the retained texture. The yellow player has a dark outline; the blue ghost uses 50% alpha. With a saved recording, the ghost dot stays at the configured spawn through countdown and the approach to the start, follows playback once the lap starts, and hides when the recording or attempt ends. Without a recording it stays hidden. The world ghost's existing visibility and movement are unchanged. All dimensions and colors are serialized; the minimap uses default UI sprites/materials and releases its generated texture on destruction.
+
 **JsonFileBestLapStorage** is a plain C# Unity adapter implementing `IBestLapStorage`, rather than a component to attach to an object. It maps readonly Core samples to private mutable JSON DTOs, validates a versioned file, writes through a temporary file, and falls back to no ghost for missing, malformed, incompatible, or unreadable data.
 
 ### Editor class
@@ -113,9 +118,17 @@ The Inspector exposes Road Color on TrackGenerator and colors, grass margin, edg
 
 **GhostlineSceneBuilder** implements **Tools > Ghostline > Build Scene**. It defines the normalized Suzuka knots, checks TMP resources before changing the scene, connects the generator and race objects, and saves `Assets/Scenes/Main.unity`. It leaves rendering assets, tags, layers, and build profiles under Editor control.
 
+**GhostlineMinimapInstaller**, in `Assets/Ghostline/Editor/GhostlineMinimapInstaller.cs`, implements **Tools > Ghostline > Add Minimap To Scene**. Open Main, stop Play mode, run the command, and save the scene yourself. It adds or repairs the minimap under the existing HUD Canvas, wires references, preserves serialized tuning, and groups changes for Undo. Repeating it creates no duplicate panel or dots. Missing required objects or ambiguous track/race/HUD objects produce a specific error. It never regenerates the track or saves Main. Fresh **Build Scene** runs include the same minimap automatically; use the additive command to preserve your existing scene edits.
+
 ## Tests
 
 Stop Play mode. Open **Window > General > Test Runner > EditMode > Run All**. Core tests cover `LapTimerTests`, `CheckpointTrackerTests`, `GhostRecordingTests`, `GhostRecorderTests`, `BestLapRepositoryTests`, `RaceSessionTests`, `DeltaCalculatorTests`, and `StartSequenceTests`. Nested EditMode storage tests cover JSON split round trips, replacement, invalid splits, and older versions. Scene tests additionally cover generated geometry, crossover clearance, race wiring, car presentation, countdown input locking, HUD formatting/fading, and final deltas against the previous best.
+
+The minimap adds **23 Core cases** in `MinimapProjectionTests` and **14 scene cases** in `MinimapViewTests` / `MinimapInstallerTests`. Both scene fixtures run directly from **Window > General > Test Runner > EditMode** with no extra setup or scene installation. They create their own objects and disposable preview scene, require no saved ghost or TMP-resource import, and never rebuild or save Main. Coverage includes closed-loop/tick drawing, smoothed edges, world transforms, resize alignment, countdown spawn, missing/end-of-playback visibility, texture cleanup, automatic wiring, repeat installation, repair, preserved tuning, and Undo. The existing scene-test assembly already references Game, Editor, UI, and the Test Framework; no assembly or package changes are needed.
+
+Latest minimap verification with Unity **6000.6.4f1**: **210 EditMode cases passed, 0 failed, 0 skipped** in an isolated project copy: **132 Core**, **19 Storage**, and **59 Scene**. This includes all 37 new minimap cases. The standalone engine-free Core run also passed **132/132**. The new minimap cases run in the Editor without batch mode; the existing `CarSpriteTests.BuilderProducesTheSameCarPresentation` test skips in an interactive run because rebuilding Main prompts for confirmation. Manual minimap placement/readability and driving review remain separate Play checks.
+
+An isolated Editor smoke check also passed fresh Build Scene installation, repeat-install idempotency without disk writes, saving/reloading every minimap reference, real-track raster generation, and countdown ghost visibility. Its rendered 1600 x 900 preview was inspected for placement, line/tick visibility, and default UI rendering. Interactive Play-mode review remains open.
 
 Core tests need no engine objects, including the new curve, throttle, driving, offset/intersection, and save-identity cases. Scene tests cover geometry, rendering, and Inspector-curve parity. Physics tests automatically enter and exit Play mode to verify force/mass behavior, coasting, brake/reverse switching, and fractional wall impacts.
 

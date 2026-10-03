@@ -9,6 +9,32 @@
 
 The track has a generated racing visual layer: dark green grass, charcoal asphalt, white edge paint, inside-corner red/white curbs, metal barriers, outside-corner tire walls, outlined grid slots, sector paint, and a two-row checkered finish strip. These meshes add no colliders or race rules. The README preview screenshot predates this track and the Lambo change.
 
+## Add the minimap to your existing scene
+
+1. Open your edited Main scene and stop Play mode. Use **Tools > Ghostline > Add Minimap To Scene** to preserve the existing track and scene edits. Do not use **Build Scene** for this installation: that command still replaces Main.
+2. The installer creates **HUD Canvas/Minimap**, containing a **Track** RawImage with **Ghost Dot** and **Player Dot** Images. It wires the track, car, ghost, race, and UI references automatically. Re-running it reuses the panel/dots, repairs a missing dot, and preserves MinimapView tuning. Installation supports Undo and marks the scene dirty; save Main yourself.
+3. Select **HUD Canvas/Minimap** and tune the serialized **MinimapView** fields below. The existing Canvas Scaler controls UI scale. Default placement is bottom-left, away from the top-left lap time and ghost delta.
+
+| MinimapView setting | Default | Meaning |
+| --- | --- | --- |
+| Height Fraction / Panel Offset | 0.2 / (24, 24) | Square panel height as a fraction of canvas height; offset in scaled canvas units from bottom-left |
+| Texture Resolution / Padding | 256 / 16 | Square runtime texture resolution; padding in texture pixels, leaving room for ticks and dots |
+| Line Width / Tick Width / Tick Length | 3 / 3 / 12 | Texture pixels; line edges use simple distance-based smoothing |
+| Player Dot Size / Ghost Dot Size | 8 / 7 | Dot diameters in scaled canvas units |
+| Outline Width | 1.5 | Player outline distance in scaled canvas units |
+| Background Color | Dark blue-black, alpha 0.65 | Panel tint and opacity |
+| Track Color / Tick Color | Light gray / white | Centerline and start/finish marker colors |
+| Player Color / Outline Color | Yellow / dark, alpha 1 | Bright player with a dark outline |
+| Ghost Color | Cyan-blue, alpha 0.5 | Distinct translucent ghost dot |
+
+Keep Padding below half the texture resolution and large enough for half the tick length plus its line width. Appearance settings for the generated track texture are read at Play startup; exit and re-enter Play after changing them. Panel and dot settings are applied each frame. The texture is drawn once from `TrackGenerator.Samples`; runtime track edits require restarting Play to rebuild the minimap. Positions outside the track bounds clamp to the padded panel rectangle.
+
+With a valid saved ghost, its dot appears at the configured spawn during **3/2/1/GO** and the approach to the start line, then follows playback after the first forward crossing. It hides when the recording ends or the attempt finishes, and returns to spawn after **R**. No recording means no ghost dot. The world ghost still remains hidden before the lap starts. The panel uses Unity's default UI material and built-in dot sprite; its only new texture is runtime-generated. No minimap shaders or material assets need assignment. Fresh **Build Scene** runs include the minimap automatically.
+
+Run **Window > General > Test Runner > EditMode** and select **MinimapViewTests** / **MinimapInstallerTests**, or **Run All**. The 14 new scene cases need no scene installation, saved ghost, batch mode, TMP-resource import, or extra test assembly setup. They clean up their own objects and preview scene. The 23 projection cases live in **MinimapProjectionTests** under the engine-free Core test assembly.
+
+Manual Play review: check that the line/tick match the track orientation, both dots align with the centerline, the player outline stays legible, and the bottom-left panel avoids your HUD edits. Resize the Game view to check scaling. Check no-ghost, countdown spawn, running playback, playback end, finish, and **R** restart. Automated checks do not replace this visual review.
+
 ## Track geometry and tuning
 
 `Assets/Ghostline/Editor/GhostlineSceneBuilder.cs` holds **SuzukaNormalizedKnots**, the sole hand-tunable knot array. It traces the colored centerline in `docs/reference/suzuka-layout.png`, following corners 1-18 from the checkered flag. Corner comments identify each group. X is pixel X divided by 1280; Y is one minus pixel Y divided by 720. The builder restores the image aspect ratio when mapping normalized points to world coordinates.
@@ -84,7 +110,7 @@ If a road or gate is black, check its renderer material is **Sprite-Unlit-Defaul
 
 ## Play and persistence checks
 
-1. Start Play while holding throttle/steering: the car stays still through **3, 2, 1** (one second each). At **GO**, driving unlocks; GO hides after 0.75 seconds. The timer and ghost remain inactive until the first forward checker crossing. The timer then starts and the HUD requests checkpoint 1 / 12.
+1. Start Play while holding throttle/steering: the car stays still through **3, 2, 1** (one second each). At **GO**, driving unlocks; GO hides after 0.75 seconds. The timer and world ghost remain inactive until the first forward checker crossing; the minimap ghost dot is already at spawn when a saved recording exists. The timer then starts and the HUD requests checkpoint 1 / 12.
 2. Follow corners 1-18 and pass gates in order. Continue straight at both crossover visits. Turning there to skip a loop must leave an expected gate unpassed; backward and out-of-order entries must not advance progress.
 3. Finish after all twelve gates. Time freezes, the best updates if faster, and driving stops. Press **R**: position, heading, velocity, timer, splits, and camera reset together; delta clears and the countdown restarts with driving locked.
 4. Start another attempt. A valid saved best appears as a translucent blue Lambo, without collisions, only after the timer starts. Each accepted gate shows current split minus best split. Check signed three-decimal values and green/red colors, fading by about three seconds; rejected gate entries must not refresh the display. At finish, the delta uses the previous best even if the lap sets a new record. The first lap has no delta. A slower lap retains the best. Re-enter Play and check disk persistence.
