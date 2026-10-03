@@ -42,11 +42,149 @@ namespace Ghostline.Tests.Scene
                     Is.EqualTo(circuit.Find("Barriers").GetComponent<MeshRenderer>().sortingOrder));
                 Bounds grass = circuit.Find("Grass").GetComponent<MeshFilter>().sharedMesh.bounds;
                 Bounds road = circuit.Find("Road").GetComponent<MeshFilter>().sharedMesh.bounds;
-                Assert.That(circuit.Find("Grass").GetComponent<MeshFilter>().sharedMesh.vertexCount, Is.EqualTo(4));
+                Assert.That(circuit.Find("Grass").GetComponent<MeshFilter>().sharedMesh.vertexCount, Is.GreaterThan(4));
                 Assert.That(road.min.x - grass.min.x, Is.GreaterThanOrEqualTo(18f));
                 Assert.That(road.min.y - grass.min.y, Is.GreaterThanOrEqualTo(18f));
                 Assert.That(grass.max.x - road.max.x, Is.GreaterThanOrEqualTo(18f));
                 Assert.That(grass.max.y - road.max.y, Is.GreaterThanOrEqualTo(18f));
+            });
+        }
+
+        [Test]
+        public void GrassBandsAlternateSerializedColorsWithoutGapsAndClipToGroundBounds()
+        {
+            WithTrack(track =>
+            {
+                TrackVisuals visuals = track.GetComponent<TrackVisuals>();
+                var settings = new SerializedObject(visuals);
+                Assert.That(settings.FindProperty("_grassStripeColor"), Is.Not.Null);
+                Assert.That(settings.FindProperty("_grassStripeWidth"), Is.Not.Null);
+                float originalWidth = settings.FindProperty("_grassStripeWidth").floatValue;
+                Color originalColor = settings.FindProperty("_grassColor").colorValue;
+                Color originalStripeColor = settings.FindProperty("_grassStripeColor").colorValue;
+                try
+                {
+                    settings.FindProperty("_grassColor").colorValue = new Color(0.15f, 0.3f, 0.1f);
+                    settings.FindProperty("_grassStripeColor").colorValue = new Color(0.25f, 0.45f, 0.2f);
+                    settings.ApplyModifiedPropertiesWithoutUndo();
+                    foreach (float width in new[] { 8f, 12.5f, 1000f })
+                    {
+                        SetFloat(visuals, "_grassStripeWidth", width);
+                        RebuildVisuals(track);
+                        Mesh grass = VisualMesh(track, "Grass");
+                        Vector3[] vertices = grass.vertices;
+                        Color[] colors = grass.colors;
+                        int firstBand = Mathf.FloorToInt(grass.bounds.min.y / width);
+                        int lastBand = Mathf.CeilToInt(grass.bounds.max.y / width);
+                        Assert.That(vertices.Length, Is.EqualTo((lastBand - firstBand) * 4));
+                        Assert.That(grass.triangles.Length, Is.EqualTo((lastBand - firstBand) * 6));
+                        Assert.That(grass.subMeshCount, Is.EqualTo(1));
+                        float previousTop = grass.bounds.min.y;
+                        settings.Update();
+                        for (int band = firstBand; band < lastBand; band++)
+                        {
+                            int offset = (band - firstBand) * 4;
+                            Assert.That(vertices[offset].x, Is.EqualTo(grass.bounds.min.x));
+                            Assert.That(vertices[offset + 1].x, Is.EqualTo(grass.bounds.max.x));
+                            Assert.That(vertices[offset].y, Is.EqualTo(previousTop).Within(0.0001f));
+                            Assert.That(vertices[offset + 1].y, Is.EqualTo(previousTop).Within(0.0001f));
+                            float top = Mathf.Min(grass.bounds.max.y, (band + 1) * width);
+                            Assert.That(vertices[offset + 2].y, Is.EqualTo(top).Within(0.0001f));
+                            Assert.That(vertices[offset + 3].y, Is.EqualTo(top).Within(0.0001f));
+                            Assert.That(top, Is.GreaterThan(previousTop));
+                            Color expected = settings.FindProperty(band % 2 == 0 ? "_grassColor" : "_grassStripeColor").colorValue;
+                            if (QualitySettings.activeColorSpace == ColorSpace.Linear)
+                                expected = expected.linear;
+                            for (int i = 0; i < 4; i++)
+                                Assert.That(colors[offset + i], Is.EqualTo(expected));
+                            previousTop = top;
+                        }
+                        Assert.That(previousTop, Is.EqualTo(grass.bounds.max.y));
+                    }
+                }
+                finally
+                {
+                    settings.Update();
+                    settings.FindProperty("_grassColor").colorValue = originalColor;
+                    settings.FindProperty("_grassStripeColor").colorValue = originalStripeColor;
+                    settings.ApplyModifiedPropertiesWithoutUndo();
+                    SetFloat(visuals, "_grassStripeWidth", originalWidth);
+                    RebuildVisuals(track);
+                }
+            });
+        }
+
+        [TestCase("_showGrass", "Grass")]
+        [TestCase("_showEdgeLines", "Edge Lines")]
+        [TestCase("_showCurbs", "Curbs")]
+        public void ThemeTogglesHideOnlyTheirCategoryAndRestoreIdenticalGeometry(string field, string layer)
+        {
+            WithTrack(track =>
+            {
+                TrackVisuals visuals = track.GetComponent<TrackVisuals>();
+                var settings = new SerializedObject(visuals);
+                Assert.That(settings.FindProperty(field), Is.Not.Null);
+                bool original = settings.FindProperty(field).boolValue;
+                string[] layers = { "Grass", "Barriers", "Tire Walls", "Edge Lines", "Curbs", "Grid", "Sector Lines", "Start Finish Checker" };
+                var vertices = layers.ToDictionary(name => name, name => VisualMesh(track, name).vertices);
+                Mesh road = VisualMesh(track, "Road");
+                EdgeCollider2D[] walls = track.GetComponentsInChildren<EdgeCollider2D>();
+                Vector2[][] wallPoints = walls.Select(w => w.points).ToArray();
+                int rendererCount = track.GetComponentsInChildren<MeshRenderer>().Length;
+                try
+                {
+                    settings.FindProperty(field).boolValue = false;
+                    settings.ApplyModifiedPropertiesWithoutUndo();
+                    RebuildVisuals(track);
+                    Assert.That(VisualMesh(track, layer).vertexCount, Is.Zero);
+                    if (layer == "Curbs")
+                        Assert.That(visuals.CurbRuns, Is.Empty);
+                    Assert.That(visuals.RibbonQuads.Any(q => q.Layer == layer), Is.False);
+                    foreach (string other in layers.Where(name => name != layer))
+                        Assert.That(VisualMesh(track, other).vertices, Is.EqualTo(vertices[other]), other);
+                    Assert.That(VisualMesh(track, "Road"), Is.SameAs(road));
+                    for (int i = 0; i < walls.Length; i++)
+                        Assert.That(walls[i].points, Is.EqualTo(wallPoints[i]));
+                    settings.Update();
+                    settings.FindProperty(field).boolValue = true;
+                    settings.ApplyModifiedPropertiesWithoutUndo();
+                    RebuildVisuals(track);
+                    Assert.That(VisualMesh(track, layer).vertices, Is.EqualTo(vertices[layer]));
+                    Assert.That(track.GetComponentsInChildren<MeshRenderer>().Length, Is.EqualTo(rendererCount));
+                }
+                finally
+                {
+                    settings.Update();
+                    settings.FindProperty(field).boolValue = original;
+                    settings.ApplyModifiedPropertiesWithoutUndo();
+                    RebuildVisuals(track);
+                }
+            });
+        }
+
+        [TestCase(0f)]
+        [TestCase(-1f)]
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        [TestCase(0.000001f)]
+        public void InvalidOrExcessiveGrassStripeWidthsFailExplicitly(float width)
+        {
+            WithTrack(track =>
+            {
+                TrackVisuals visuals = track.GetComponent<TrackVisuals>();
+                var settings = new SerializedObject(visuals);
+                Assert.That(settings.FindProperty("_grassStripeWidth"), Is.Not.Null);
+                float original = settings.FindProperty("_grassStripeWidth").floatValue;
+                try
+                {
+                    SetFloat(visuals, "_grassStripeWidth", width);
+                    Assert.Throws<InvalidOperationException>(() => RebuildVisuals(track));
+                }
+                finally
+                {
+                    SetFloat(visuals, "_grassStripeWidth", original);
+                    RebuildVisuals(track);
+                }
             });
         }
 

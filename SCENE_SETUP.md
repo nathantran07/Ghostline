@@ -7,7 +7,7 @@
 3. Stop Play mode and choose **Tools > Ghostline > Build Scene**. Confirm replacement of `Assets/Scenes/Main.unity`. Save personal scene edits elsewhere before rebuilding.
 4. Open **Main** and press Play. The player starts behind the upper-right start/finish line, heading down-right into corner 1. Click the Game view for keyboard input.
 
-The track has a generated racing visual layer: dark green grass, charcoal asphalt, white edge paint, inside-corner red/white curbs, metal barriers, outside-corner tire walls, outlined grid slots, sector paint, and a two-row checkered finish strip. These meshes add no colliders or race rules. The README preview screenshot predates this track and the Lambo change.
+The track has a generated racing visual layer: alternating mowed grass bands, charcoal asphalt, white edge paint, inside-corner red/white curbs, metal barriers, outside-corner tire walls, outlined grid slots, sector paint, and a two-row checkered finish strip. These meshes add no colliders or race rules. The README preview screenshot predates this track and the Lambo change.
 
 ## Add the minimap to your existing scene
 
@@ -59,7 +59,9 @@ The road is one closed mesh strip. Visible walls are mesh strips over **EdgeColl
 
 | TrackVisuals setting | Default | Meaning |
 | --- | --- | --- |
-| Grass Color / Margin / Screen Height | RGB 9/24/13 / 18 / 18 | One ground quad; margin is at least the larger of the configured height and the Main Camera's current orthographic height, on every side |
+| Show Grass / Show Edge Lines / Show Curbs | All on | Independent presentation toggles; disabled categories retain empty meshes and existing objects |
+| Grass Color / Grass Stripe Color / Grass Stripe Width | RGB 9/24/13 / RGB 14/36/18 / 8 | Two alternating greens in horizontal bands anchored at local Y = 0; existing Grass Color values are preserved |
+| Grass Margin / Screen Height | 18 / 18 | One combined ground mesh; margin is at least the larger of the configured height and the Main Camera's current orthographic height, on every side |
 | White / Red / Black | White / RGB 217/11/10 / RGB 4/4/4 | Paint, alternating curb/tire blocks, and checker colors |
 | Edge Width / Inset | 0.15 / 0.05 | White edge strip fully on the asphalt |
 | Curb Width / Curvature Threshold | 0.5 / 0.035 | Inner-side curb; signed curvature magnitude must exceed threshold, in inverse world units |
@@ -76,6 +78,10 @@ The road is one closed mesh strip. Visible walls are mesh strips over **EdgeColl
 | Sector Line Width / Corner 8 Knot / Corner 15 Knot | 0.15 / 30 / 65 | Thin full-width paint at start and the nearest existing gates to those corner anchors |
 
 Sorting orders: grass **-7**; barriers/tire walls **-6**; road **-5**; edge lines **-4**; curbs **-3**; grid **-2**; sectors **-1**; checker **0**. Existing checkpoint sprites **2**, wall surface **3**, ghost **4**, player **5**, and screen-space HUD retain their orders. The plain start sprite and the two replaced sector-boundary sprites are hidden; their transforms, trigger dimensions, indices, and wiring are retained. The pink start sector line has a visible leading edge beside the checker.
+
+For the grass/road-paint visual checkpoint, keep your existing Main scene open, select **Ghostline/Track > TrackVisuals**, and enter Play. Adjust the two grass colors, Grass Stripe Width, and category toggles outside Play, then restart Play to rebuild only the transient visuals with unchanged track settings. Do not use **Build Scene** on your edited scene. No installer or scene rebuild is needed for this checkpoint. Stripe width must be finite and positive; settings requiring more than 4096 grass bands fail explicitly. The first and last bands are clipped to the existing ground bounds, with no gaps or extra renderers.
+
+Run **TrackVisualGeometryTests** in EditMode to check stripe continuity/colors, independent toggles, invalid widths, kerb side/curvature/stripe selection, crossover clearance, sorting, and collider/gate preservation. Inspect the start and corner previews and drive a lap to review stripe contrast and paint visibility. This first theme commit stops for visual review; blossom trees, grandstands, circular tire stacks, striped banner blocks, Ferris wheel, and additive installer are planned for later commits. The minimap remains an ordinary UI overlay; there is no decor exclusion or text rendering.
 
 The crossover is a flat intersection. Both spline passes continue straight. Wall samples inside another road corridor are omitted when their separation along the loop exceeds three road widths. Each omission splits the wall into open polylines; collider ends cannot bridge the intersection.
 

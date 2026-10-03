@@ -11,10 +11,15 @@ namespace Ghostline.Game
     public sealed class TrackVisuals : MonoBehaviour
     {
         [Header("Ground")]
+        [SerializeField] private bool _showGrass = true;
         [SerializeField] private Color _grassColor = new Color(0.035f, 0.095f, 0.05f);
+        [SerializeField] private Color _grassStripeColor = new Color(0.055f, 0.14f, 0.07f);
+        [SerializeField, Min(0.1f)] private float _grassStripeWidth = 8f;
         [SerializeField, Min(0f)] private float _grassMargin = 18f;
         [SerializeField, Min(0.1f)] private float _screenHeight = 18f;
         [Header("Edge lines and curbs")]
+        [SerializeField] private bool _showEdgeLines = true;
+        [SerializeField] private bool _showCurbs = true;
         [SerializeField] private Color _white = Color.white;
         [SerializeField] private Color _red = new Color(0.85f, 0.045f, 0.04f);
         [SerializeField, Min(0.01f)] private float _edgeWidth = 0.15f;
@@ -143,7 +148,7 @@ namespace Ghostline.Game
 
         private void ValidateSettings()
         {
-            float[] positive = { _screenHeight, _edgeWidth, _curbWidth, _curbCurvatureThreshold, _curbStripeLength,
+            float[] positive = { _screenHeight, _grassStripeWidth, _edgeWidth, _curbWidth, _curbCurvatureThreshold, _curbStripeLength,
                 _barrierWidth, _barrierCenterWidth, _tireWidth, _tireCurvatureThreshold, _tireBlockLength,
                 _checkerDepth, _gridSlotLength, _gridSlotWidth, _gridOutlineWidth, _gridRowSpacing,
                 _frontGridDistance, _gridCurvatureLimit, _sectorLineWidth };
@@ -165,6 +170,12 @@ namespace Ghostline.Game
 
         private void BuildGrass()
         {
+            var mesh = new ColoredMesh();
+            if (!_showGrass)
+            {
+                Assign(0, mesh);
+                return;
+            }
             Vector2 minimum = _track.Samples[0].Position;
             Vector2 maximum = minimum;
             foreach (TrackSample sample in _track.Samples)
@@ -182,8 +193,19 @@ namespace Ghostline.Game
                 + _track.RoadWidth * 0.5f + _track.WallThickness + _barrierGap + _barrierWidth + _tireWidth;
             minimum -= Vector2.one * margin;
             maximum += Vector2.one * margin;
-            var mesh = new ColoredMesh();
-            mesh.AddQuad(minimum, new Vector2(maximum.x, minimum.y), maximum, new Vector2(minimum.x, maximum.y), _grassColor);
+            float firstBand = Mathf.Floor(minimum.y / _grassStripeWidth);
+            float bandCount = Mathf.Ceil(maximum.y / _grassStripeWidth) - firstBand;
+            if (float.IsNaN(bandCount) || float.IsInfinity(bandCount) || bandCount < 1f || bandCount > 4096f)
+                throw new InvalidOperationException("Grass stripe width must produce between 1 and 4096 bands.");
+            for (int i = 0; i < (int)bandCount; i++)
+            {
+                float band = firstBand + i;
+                float bottom = Mathf.Max(minimum.y, band * _grassStripeWidth);
+                float top = Mathf.Min(maximum.y, (band + 1f) * _grassStripeWidth);
+                Color color = band % 2f == 0f ? _grassColor : _grassStripeColor;
+                mesh.AddQuad(new Vector2(minimum.x, bottom), new Vector2(maximum.x, bottom),
+                    new Vector2(maximum.x, top), new Vector2(minimum.x, top), color);
+            }
             Assign(0, mesh);
         }
 
@@ -203,9 +225,12 @@ namespace Ghostline.Game
             float barrierInner = roadEdge + _track.WallThickness + _barrierGap;
             for (int side = -1; side <= 1; side += 2)
             {
-                List<TrackVisualRun> edgeRuns = FindRuns(side, lineInner, lineOuter, 0f, 0f, false);
-                foreach (TrackVisualRun run in edgeRuns)
-                    AddRibbon(edges, "Edge Lines", run, lineInner, lineOuter, _white, 0f);
+                if (_showEdgeLines)
+                {
+                    List<TrackVisualRun> edgeRuns = FindRuns(side, lineInner, lineOuter, 0f, 0f, false);
+                    foreach (TrackVisualRun run in edgeRuns)
+                        AddRibbon(edges, "Edge Lines", run, lineInner, lineOuter, _white, 0f);
+                }
                 List<TrackVisualRun> barrierRuns = FindRuns(side, barrierInner, barrierInner + _barrierWidth, 0f, 0f, false);
                 float center = barrierInner + _barrierWidth * 0.5f;
                 foreach (TrackVisualRun run in barrierRuns)
@@ -214,11 +239,14 @@ namespace Ghostline.Game
                     AddRibbon(barriers, "Barriers", run, center - _barrierCenterWidth * 0.5f, center + _barrierCenterWidth * 0.5f, _barrierCenterColor, 0f);
                     AddRibbon(barriers, "Barriers", run, center + _barrierCenterWidth * 0.5f, barrierInner + _barrierWidth, _barrierColor, 0f);
                 }
-                List<TrackVisualRun> curbRuns = FindRuns(side, lineInner - _curbWidth, lineInner,
-                    _curbCurvatureThreshold, _curbMinimumRunLength, false);
-                _curbRuns.AddRange(curbRuns);
-                foreach (TrackVisualRun run in curbRuns)
-                    AddRibbon(curbs, "Curbs", run, lineInner - _curbWidth, lineInner, _red, _curbStripeLength);
+                if (_showCurbs)
+                {
+                    List<TrackVisualRun> curbRuns = FindRuns(side, lineInner - _curbWidth, lineInner,
+                        _curbCurvatureThreshold, _curbMinimumRunLength, false);
+                    _curbRuns.AddRange(curbRuns);
+                    foreach (TrackVisualRun run in curbRuns)
+                        AddRibbon(curbs, "Curbs", run, lineInner - _curbWidth, lineInner, _red, _curbStripeLength);
+                }
                 float tireInner = barrierInner + _barrierWidth;
                 List<TrackVisualRun> tireRuns = FindRuns(side, tireInner, tireInner + _tireWidth,
                     _tireCurvatureThreshold, _tireMinimumRunLength, true);
