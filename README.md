@@ -2,18 +2,27 @@
 
 A small top-down Unity 2D time-trial game built as a software engineering portfolio project. Drive a rectangular loop, pass four checkpoints in order, and cross the start/finish line. A faster completed lap is saved locally and becomes a translucent replay car on later attempts and later runs.
 
+![Ghostline gameplay showing the rectangular track, player car, saved ghost, and lap HUD](docs/images/ghostline-gameplay.png)
+
+*Unity-rendered gameplay during a lap, with the camera framed to show the full track for this preview. Normal play follows the car.*
+
 ## Open and play
 
-The working project is **`X:\Unity Projects\Ghostline`**, not the originally proposed `C:\Dev\Ghostline`. Its recorded Editor version is **6000.6.4f1** (`ProjectSettings/ProjectVersion.txt`). Open this project with that version through Unity Hub. No package installation, external artwork, input action asset, or custom game material is required.
+Use **Unity 6000.6.4f1**, the version recorded in `ProjectSettings/ProjectVersion.txt`, and **Git LFS** for the template/TMP binary assets. No additional Unity packages, artwork, input action assets, or custom game materials are needed.
 
-1. Wait for compilation and check the Console for errors.
-2. Verify **Edit > Project Settings > Player > Other Settings > Configuration > Active Input Handling** is **Input System Package (New)** or **Both**. The manifest includes `com.unity.inputsystem`; the supplied project is already set to New.
-3. Import **Window > TextMeshPro > Import TMP Essential Resources**, click **Import**, and wait until importing finishes. Do this before creating the HUD or running the scene builder.
-4. Run **Tools > Ghostline > Build Scene**. It saves and opens `Assets/Scenes/Main.unity`. Rebuilding replaces edits to that scene after confirmation.
-5. If rectangles appear black, follow the **Sprite-Unlit-Default** material instructions in [SCENE_SETUP.md](SCENE_SETUP.md). The builder preserves default sprite materials and creates no lights.
-6. Press **Play**, click the **Game** view to give it keyboard focus, and drive across the white line to start.
+```shell
+git lfs install
+git clone https://github.com/nathantran07/Ghostline.git
+cd Ghostline
+git lfs pull
+```
 
-[SCENE_SETUP.md](SCENE_SETUP.md) includes the full manual scene construction fallback, every component and Inspector reference, and a Play verification checklist.
+1. In Unity Hub, choose **Add > Add project from disk** and select the cloned **Ghostline** folder. Open it with the recorded Editor version, wait for package resolution/compilation, and check the Console for errors.
+2. Double-click **Assets/Scenes/Main.unity** in the Project window. The playable scene and TMP Essential Resources are included in the repository; rebuilding or importing them again is unnecessary for a normal first run.
+3. Verify **Edit > Project Settings > Player > Other Settings > Configuration > Active Input Handling** is **Input System Package (New)** or **Both**. The manifest includes `com.unity.inputsystem`; the supplied project is already set to New.
+4. Press **Play**, click the **Game** view to give it keyboard focus, and drive across the white line to start.
+
+For rebuilding the scene or constructing it manually, use [SCENE_SETUP.md](SCENE_SETUP.md). That guide includes the required **Window > TextMeshPro > Import TMP Essential Resources** step before building a HUD if the resources are missing, every component/Inspector reference, and the **Sprite-Unlit-Default** fallback if rectangles appear black. Rebuilding replaces saved scene edits after confirmation.
 
 ## Controls and race rules
 
@@ -93,11 +102,11 @@ Stop Play mode. Open **Window > General > Test Runner > EditMode > Run All**. Th
 
 The tests cover timer transitions and events, ordered checkpoints, interpolated and clamped playback, angular wraparound, fixed recording intervals, complete endpoints, storage replacement and round-tripping through an in-memory fake, and an entire Core race attempt. Tests do not need a scene, sprite, camera, or physics simulation.
 
-For batch testing on this machine, close the project's Unity Editor first. Run this in PowerShell; `Start-Process -Wait` waits for completion even though Unity is a Windows GUI executable:
+For batch testing, close this project's Unity Editor first and open PowerShell at the repository root. Adjust the Editor executable path if Unity Hub is installed elsewhere. `Start-Process -Wait` waits for completion even though Unity is a Windows GUI executable:
 
 ```powershell
 $unityEditor = 'C:\Program Files\Unity\Hub\Editor\6000.6.4f1\Editor\Unity.exe'
-$projectPath = 'X:\Unity Projects\Ghostline'
+$projectPath = (Get-Location).Path
 $testResultsPath = Join-Path $env:TEMP 'Ghostline-EditMode.xml'
 $testLogPath = Join-Path $env:TEMP 'Ghostline-EditMode.log'
 $arguments = @(
@@ -115,7 +124,9 @@ $results.'test-run' | Select-Object result, total, passed, failed
 
 Expect exit code 0, `result = Passed`, `passed = 24`, and `failed = 0`. Inspect the specified log if no results file is produced. The Test Framework exits Unity when the run finishes; omit `-quit` when using `-runTests`. See Unity's [test command-line reference](https://docs.unity.com/en-us/engine/6000.7/manual/scripting/test-framework-introduction/reference-command-line).
 
-Implementation verification used the installed Editor against an isolated copy because this project was already open: **24 EditMode cases passed**. Additional Editor checks passed JSON round-tripping/replacement, corrupt-save fallback, generated sprites with preserved default materials, and scene saving/reloading with the expected colliders, camera, HUD references, and no lights. Visual appearance and driving feel still require the Play checks in the setup guide.
+Verification used the installed Editor against an isolated project copy: **24 EditMode cases passed**. Additional Editor checks passed JSON round-tripping/replacement, corrupt-save fallback, generated sprites with preserved default materials, and scene saving/reloading with the expected colliders, camera, HUD references, and no lights.
+
+A temporary PlayMode smoke test also passed two driven laps using keyboard input, ordered physical checkpoint crossings, R restart, preservation of the faster lap, ghost playback, wall collisions, and loading the saved best into a fresh scene. Its isolated save folder kept personal records untouched; the harness is outside this repository. The gameplay preview above was captured from Unity and visually checked for visible colored sprites and readable TMP text. Use the setup guide's Play checks to assess driving feel on your own machine.
 
 ## Save data
 

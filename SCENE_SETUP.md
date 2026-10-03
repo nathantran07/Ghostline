@@ -1,12 +1,14 @@
 # Ghostline scene setup
 
-Use the automatic builder first. The manual steps below produce the same scene without the builder. All coordinates and sizes are in Unity world units unless they describe the HUD.
+The repository includes the playable Main scene and TMP Essential Resources. For a first run, open **Assets/Scenes/Main.unity**, press **Play**, and click the **Game** view. Follow [README.md](README.md) to clone the project with Git LFS.
+
+Use the automatic builder below when you want to regenerate Main. The manual fallback produces the same scene without the builder. All coordinates and sizes are in Unity world units unless they describe the HUD.
 
 ## Automatic setup
 
-1. In Unity Hub, open `X:\Unity Projects\Ghostline` with **6000.6.4f1**, the version recorded in `ProjectSettings/ProjectVersion.txt`. Wait for compilation. Open **Window > General > Console** and resolve any red compilation errors before continuing.
+1. In Unity Hub, open your local **Ghostline** project folder with **6000.6.4f1**, the version recorded in `ProjectSettings/ProjectVersion.txt`. Wait for compilation. Open **Window > General > Console** and resolve any red compilation errors before continuing.
 2. Open **Edit > Project Settings > Player > Other Settings > Configuration**. Verify **Active Input Handling** is **Input System Package (New)** or **Both**. Accept an Editor restart if Unity requests one. The scripts use `UnityEngine.InputSystem.Keyboard.current`, without action assets.
-3. Open **Window > TextMeshPro > Import TMP Essential Resources**. Click **Import** in the package window and wait for the progress indicator to finish. Confirm `Assets/TextMesh Pro/Resources/TMP Settings.asset` and `Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset` exist. Skipping this step causes missing/broken HUD text; the builder refuses to build until the settings and default font are available. TMP Examples & Extras are unnecessary.
+3. Confirm `Assets/TextMesh Pro/Resources/TMP Settings.asset` and `Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset` exist; both are committed. If either is missing, open **Window > TextMeshPro > Import TMP Essential Resources**, click **Import**, and wait for importing to finish **before building the HUD**. Missing resources cause broken text; the builder refuses to build until the settings and default font are available. TMP Examples & Extras are unnecessary.
 4. Stop Play mode if it is active. Choose **Tools > Ghostline > Build Scene**. Save your current scene if prompted. If Main already exists, **Rebuild** replaces its previous objects and Inspector edits. The result opens as `Assets/Scenes/Main.unity` with all script fields assigned.
 5. Inspect the rectangles. If they are black or invisible because of a light-dependent default, apply the **Sprite-Unlit-Default** fallback below. Do not add lights or create materials.
 6. Press **Ctrl+S** to preserve any manual material changes. Press **Play**, click inside **Game**, then hold W/Up to cross the white start line. Follow the Play checks at the end of this guide.
