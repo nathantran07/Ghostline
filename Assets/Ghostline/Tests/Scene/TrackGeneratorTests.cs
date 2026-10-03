@@ -260,6 +260,8 @@ namespace Ghostline.Tests.Scene
                 Assert.Throws<ArgumentOutOfRangeException>(() => track.Configure(material, roadWidth: float.NaN));
                 var fields = new SerializedObject(track);
                 float originalWidth = track.RoadWidth;
+                Assert.That(track.RequiredRadius, Is.EqualTo(track.RoadWidth * 0.5f + track.WallThickness
+                    + fields.FindProperty("_radiusMargin").floatValue).Within(0.0001f));
                 fields.FindProperty("_roadWidth").floatValue = track.Length;
                 fields.ApplyModifiedPropertiesWithoutUndo();
                 try

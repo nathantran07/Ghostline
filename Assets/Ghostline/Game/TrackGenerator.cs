@@ -48,7 +48,7 @@ namespace Ghostline.Game
         public float Length { get; private set; }
         public float SampleSpacing => Length / _sampleCount;
         public float MinimumRadius { get; private set; }
-        public float RequiredRadius => _roadWidth * 0.5f + _radiusMargin;
+        public float RequiredRadius => _roadWidth * 0.5f + _wallThickness + _radiusMargin;
         public IReadOnlyList<TrackSample> Samples => _samples;
         public IReadOnlyList<TrackCrossing> Crossings => _crossings;
         public IReadOnlyList<float> GateDistances => _gateDistances;
