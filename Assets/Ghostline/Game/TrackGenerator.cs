@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Ghostline.Core;
 using UnityEngine;
 using UnityEngine.Splines;
 
@@ -10,16 +11,22 @@ namespace Ghostline.Game
     [RequireComponent(typeof(SplineContainer))]
     public sealed class TrackGenerator : MonoBehaviour
     {
-        [SerializeField, Min(0.1f)] private float _roadWidth = 2.2f;
+        [SerializeField, Min(0.1f)] private float _roadWidth = 2.93f;
         [SerializeField, Min(0.01f)] private float _wallThickness = 0.2f;
         [SerializeField, Range(128, 8192)] private int _sampleCount = 2048;
         [SerializeField, Min(2)] private int _checkpointCount = 12;
         [SerializeField, Min(0.01f)] private float _radiusMargin = 0.3f;
+        [SerializeField, Min(0.1f)] private float _offsetSmoothingLength = 6f;
         [SerializeField] private Color _roadColor = new Color(0.17f, 0.2f, 0.25f);
         [SerializeField] private Material _material;
         [SerializeField] private Transform _generatedRoot;
         [SerializeField] private MeshFilter _roadFilter;
         [SerializeField] private MeshFilter _wallFilter;
+        [SerializeField, HideInInspector] private float _builtRoadWidth;
+        [SerializeField, HideInInspector] private float _builtWallThickness;
+        [SerializeField, HideInInspector] private float _builtRadiusMargin;
+        [SerializeField, HideInInspector] private float _builtSmoothingLength;
+        [SerializeField, HideInInspector] private int _builtSampleCount;
         private Mesh _roadMesh;
         private Mesh _wallMesh;
         private TrackSample[] _samples = Array.Empty<TrackSample>();
@@ -28,6 +35,12 @@ namespace Ghostline.Game
         private readonly List<float> _gateDistances = new List<float>();
         private readonly Dictionary<Vector2Int, List<int>> _roadCells = new Dictionary<Vector2Int, List<int>>();
         private float _corridorCellSize;
+        private float[] _halfWidths = Array.Empty<float>();
+        private Vector2[] _leftWall = Array.Empty<Vector2>();
+        private Vector2[] _rightWall = Array.Empty<Vector2>();
+        private bool[] _leftSegments = Array.Empty<bool>();
+        private bool[] _rightSegments = Array.Empty<bool>();
+        private readonly List<TrackWidthLimit> _widthLimits = new List<TrackWidthLimit>();
 
         public float RoadWidth => _roadWidth;
         public float WallThickness => _wallThickness;
@@ -39,6 +52,21 @@ namespace Ghostline.Game
         public IReadOnlyList<TrackSample> Samples => _samples;
         public IReadOnlyList<TrackCrossing> Crossings => _crossings;
         public IReadOnlyList<float> GateDistances => _gateDistances;
+        public IReadOnlyList<TrackWidthLimit> WidthLimits => _widthLimits;
+
+        public float GetRoadWidth(float distance)
+        {
+            if (_halfWidths.Length == 0 || float.IsNaN(distance) || float.IsInfinity(distance))
+                throw new ArgumentOutOfRangeException(nameof(distance));
+            return 2f * TrackOffsetGeometry.InterpolateClosed(_halfWidths, distance, Length);
+        }
+
+        public float GetSampleRoadWidth(int index)
+        {
+            if (index < 0 || index >= _halfWidths.Length)
+                throw new ArgumentOutOfRangeException(nameof(index));
+            return _halfWidths[index] * 2f;
+        }
 
         public float GetSignedCurvature(int index)
         {
@@ -51,7 +79,7 @@ namespace Ghostline.Game
             return denominator > 0.000001f ? 2f * Cross(b - a, c - a) / denominator : 0f;
         }
 
-        public void Configure(Material material, int checkpointCount = 12, float roadWidth = 2.2f,
+        public void Configure(Material material, int checkpointCount = 12, float roadWidth = 2.93f,
             float wallThickness = 0.2f, int sampleCount = 2048)
         {
             if (material == null)
@@ -111,7 +139,7 @@ namespace Ghostline.Game
             }
             if (MinimumRadius > RequiredRadius)
                 return true;
-            Debug.LogError($"Track corner at arc length {tightestDistance:0.00} has radius {MinimumRadius:0.00}; must exceed {RequiredRadius:0.00}.", this);
+            Debug.Log($"Track width requires local limits near arc length {tightestDistance:0.00}; radius {MinimumRadius:0.00}, requested clearance radius {RequiredRadius:0.00}.", this);
             return false;
         }
 
@@ -122,9 +150,9 @@ namespace Ghostline.Game
             if (race.CheckpointCount != _checkpointCount)
                 throw new InvalidOperationException("Configure RaceManager with the track's checkpoint count before generation.");
             SampleSpline();
-            if (!ValidateRadius())
-                throw new InvalidOperationException("Track radius validation failed. Widen the named corners before generating geometry.");
+            PrepareWallPaths();
             FindCrossings();
+            ReportWidthLimits();
             PlaceGateDistances();
             if (_generatedRoot != null)
             {
@@ -146,14 +174,43 @@ namespace Ghostline.Game
             CreateGate(gates, race, 0f, true, 0);
             for (int i = 0; i < _gateDistances.Count; i++)
                 CreateGate(gates, race, _gateDistances[i], false, i);
+            TrackVisuals visuals = GetComponent<TrackVisuals>();
+            if (visuals != null)
+            {
+                TrackSample spawn = visuals.GetSpawnSample(this);
+                race.SetSpawn(spawn.Position, Mathf.Atan2(spawn.Tangent.y, spawn.Tangent.x) * Mathf.Rad2Deg - 90f);
+            }
+            _builtRoadWidth = _roadWidth;
+            _builtWallThickness = _wallThickness;
+            _builtRadiusMargin = _radiusMargin;
+            _builtSmoothingLength = _offsetSmoothingLength;
+            _builtSampleCount = _sampleCount;
+        }
+
+        [ContextMenu("Regenerate Track")]
+        public void Regenerate()
+        {
+            RaceManager race = transform.parent != null ? transform.parent.GetComponentInChildren<RaceManager>() : null;
+            if (race == null)
+                throw new InvalidOperationException("Track regeneration needs a RaceManager under the same root.");
+            Generate(race);
         }
 
         private void OnEnable()
         {
             if (_roadFilter == null || _material == null)
                 return;
+            if (_builtRoadWidth != _roadWidth || _builtWallThickness != _wallThickness
+                || _builtRadiusMargin != _radiusMargin || _builtSmoothingLength != _offsetSmoothingLength
+                || _builtSampleCount != _sampleCount)
+            {
+                // A changed Inspector width must update serialized physics and gates as well as meshes.
+                Regenerate();
+                return;
+            }
             // Meshes are transient; colliders and gates are serialized in the scene.
             SampleSpline();
+            PrepareWallPaths();
             FindCrossings();
             PlaceGateDistances();
             RebuildMeshes();
@@ -172,7 +229,7 @@ namespace Ghostline.Game
                 throw new InvalidOperationException("Track requires a closed spline with at least four knots.");
             if (!IsPositive(_roadWidth) || !IsPositive(_wallThickness) || !IsPositive(_radiusMargin)
                 || _wallThickness >= _radiusMargin * 2f || _checkpointCount < 2
-                || _sampleCount < 128 || _sampleCount > 8192)
+                || !IsPositive(_offsetSmoothingLength) || _sampleCount < 128 || _sampleCount > 8192)
                 throw new InvalidOperationException("Track geometry settings are invalid.");
             // Splines' per-curve distance table has only 30 entries. A dense measured table
             // avoids uneven sample spacing on long or sharply varying Bezier segments.
@@ -192,6 +249,81 @@ namespace Ghostline.Game
             for (int i = 0; i < _sampleCount; i++)
                 _samples[i] = GetSample(i * SampleSpacing);
             IndexRoadCorridors();
+            _halfWidths = new float[_sampleCount];
+            MinimumRadius = float.PositiveInfinity;
+            for (int i = 0; i < _sampleCount; i++)
+            {
+                float radius = TrackOffsetGeometry.Radius(ToPoint(_samples[(i + _sampleCount - 1) % _sampleCount].Position),
+                    ToPoint(_samples[i].Position), ToPoint(_samples[(i + 1) % _sampleCount].Position));
+                MinimumRadius = Mathf.Min(MinimumRadius, radius);
+                _halfWidths[i] = TrackOffsetGeometry.ClampHalfWidth(_roadWidth * 0.5f, radius, _wallThickness, _radiusMargin);
+            }
+            SmoothWidths();
+        }
+
+        private void SmoothWidths()
+        {
+            TrackOffsetGeometry.SmoothClosed(_halfWidths, SampleSpacing, _roadWidth * 0.5f / _offsetSmoothingLength);
+        }
+
+        private void PrepareWallPaths()
+        {
+            _leftWall = new Vector2[_sampleCount];
+            _rightWall = new Vector2[_sampleCount];
+            _leftSegments = new bool[_sampleCount];
+            _rightSegments = new bool[_sampleCount];
+            var left = new TrackPoint[_sampleCount];
+            var right = new TrackPoint[_sampleCount];
+            for (int attempt = 0; attempt < 32; attempt++)
+            {
+                for (int i = 0; i < _sampleCount; i++)
+                {
+                    Vector2 offset = _samples[i].Normal * (_halfWidths[i] + _wallThickness * 0.5f);
+                    _leftWall[i] = _samples[i].Position + offset;
+                    _rightWall[i] = _samples[i].Position - offset;
+                    left[i] = ToPoint(_leftWall[i]);
+                    right[i] = ToPoint(_rightWall[i]);
+                }
+                for (int i = 0; i < _sampleCount; i++)
+                {
+                    _leftSegments[i] = WallSegmentClear(_leftWall, i);
+                    _rightSegments[i] = WallSegmentClear(_rightWall, i);
+                }
+                List<TrackIntersection> intersections = TrackOffsetGeometry.FindIntersections(left, _leftSegments,
+                    right, _rightSegments, _roadWidth);
+                if (intersections.Count == 0)
+                {
+                    _widthLimits.Clear();
+                    _widthLimits.AddRange(TrackOffsetGeometry.GetWidthLimits(_halfWidths, SampleSpacing, _roadWidth));
+                    return;
+                }
+                TrackOffsetGeometry.ShrinkAtIntersections(_halfWidths, intersections, 0.8f);
+                SmoothWidths();
+            }
+            throw new InvalidOperationException("No safe wall offset could be generated after 32 local width reductions.");
+        }
+
+        private bool WallSegmentClear(Vector2[] points, int index)
+        {
+            int next = (index + 1) % _sampleCount;
+            return !InsideOtherRoad(points[index], _samples[index].Distance)
+                && !InsideOtherRoad(points[next], _samples[next].Distance)
+                && !InsideOtherRoad((points[index] + points[next]) * 0.5f, _samples[index].Distance + SampleSpacing * 0.5f);
+        }
+
+        private void ReportWidthLimits()
+        {
+            foreach (TrackWidthLimit limit in _widthLimits)
+                Debug.Log($"Track width limited at arc lengths {limit.FromDistance:0.00}-{limit.ToDistance:0.00}: minimum {limit.MinimumWidth:0.00}, requested {_roadWidth:0.00} (corner/intersection clearance, smoothed).", this);
+            if (_widthLimits.Count == 0)
+                Debug.Log($"Track width {_roadWidth:0.00} fits all corners without reduction.", this);
+            foreach (TrackCrossing crossing in _crossings)
+                Debug.Log($"Track crossover clearance at arc lengths {crossing.FirstDistance:0.00}/{crossing.SecondDistance:0.00}: walls opened where their full thickness enters the other road corridor.", this);
+        }
+
+        private static TrackPoint ToPoint(Vector2 point)
+        {
+            return new TrackPoint(point.x, point.y);
         }
 
         private void IndexRoadCorridors()
@@ -302,13 +434,11 @@ namespace Ghostline.Game
 
         private void BuildWalls(Transform parent, float side)
         {
-            var points = new Vector2[_sampleCount];
-            var allowed = new bool[_sampleCount];
+            Vector2[] points = side > 0f ? _leftWall : _rightWall;
+            bool[] allowed = side > 0f ? _leftSegments : _rightSegments;
             int firstGap = -1;
             for (int i = 0; i < _sampleCount; i++)
             {
-                points[i] = _samples[i].Position + _samples[i].Normal * ((_roadWidth + _wallThickness) * 0.5f * side);
-                allowed[i] = !InsideOtherRoad(points[i], _samples[i].Distance);
                 if (!allowed[i])
                     firstGap = i;
             }
@@ -318,12 +448,14 @@ namespace Ghostline.Game
             {
                 int i = (start + n) % _sampleCount;
                 if (allowed[i])
-                    run.Add(points[i]);
+                {
+                    if (run.Count == 0)
+                        run.Add(points[i]);
+                    run.Add(points[(i + 1) % _sampleCount]);
+                }
                 else
                     FlushWall(parent, run, side);
             }
-            if (firstGap < 0)
-                run.Add(points[0]);
             FlushWall(parent, run, side);
         }
 
@@ -387,8 +519,8 @@ namespace Ghostline.Game
             for (int i = 0; i <= _sampleCount; i++)
             {
                 TrackSample sample = _samples[i % _sampleCount];
-                left[i] = sample.Position + sample.Normal * (_roadWidth * 0.5f);
-                right[i] = sample.Position - sample.Normal * (_roadWidth * 0.5f);
+                left[i] = sample.Position + sample.Normal * _halfWidths[i % _sampleCount];
+                right[i] = sample.Position - sample.Normal * _halfWidths[i % _sampleCount];
             }
             var vertices = new List<Vector3>();
             var triangles = new List<int>();
@@ -465,7 +597,7 @@ namespace Ghostline.Game
             gate.transform.localPosition = sample.Position;
             gate.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(sample.Tangent.y, sample.Tangent.x) * Mathf.Rad2Deg);
             gate.GetComponent<SolidSprite>().Configure(startFinish ? Color.white : new Color(1f, 0.65f, 0.15f, 0.7f),
-                new Vector2(0.25f, _roadWidth), 2);
+                new Vector2(0.25f, GetRoadWidth(distance)), 2);
             gate.GetComponent<SpriteRenderer>().sharedMaterial = _material;
             gate.GetComponent<BoxCollider2D>().size = Vector2.one;
             gate.GetComponent<CheckpointTrigger>().Configure(race, startFinish, index,

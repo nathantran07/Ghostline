@@ -270,9 +270,18 @@ namespace Ghostline.Game
             return runs;
         }
 
+        private float AdjustOffset(float offset, float distance)
+        {
+            return offset - (_track.RoadWidth - _track.GetRoadWidth(distance)) * 0.5f;
+        }
+
         private bool RibbonClear(float distance, int side, float inner, float outer)
         {
             TrackSample sample = _track.GetSample(distance);
+            inner = AdjustOffset(inner, distance);
+            outer = AdjustOffset(outer, distance);
+            if (inner < 0f || outer <= inner)
+                return false;
             return !_track.InsideOtherRoad(sample.Position + sample.Normal * (inner * side), sample.Distance)
                 && !_track.InsideOtherRoad(sample.Position + sample.Normal * (outer * side), sample.Distance)
                 && !_track.InsideOtherRoad(sample.Position + sample.Normal * ((inner + outer) * 0.5f * side), sample.Distance);
@@ -295,10 +304,14 @@ namespace Ghostline.Game
                     {
                         TrackSample a = _track.GetSample(aDistance);
                         TrackSample b = _track.GetSample(bDistance);
+                        float aInner = AdjustOffset(inner, aDistance);
+                        float aOuter = AdjustOffset(outer, aDistance);
+                        float bInner = AdjustOffset(inner, bDistance);
+                        float bOuter = AdjustOffset(outer, bDistance);
                         Color color = stripe % 2 == 0 ? firstColor : (firstColor == _white ? _red : _white);
                         _ribbonQuads.Add(new TrackVisualQuad(layer, mesh.VertexCount, aDistance, bDistance));
-                        mesh.AddQuad(a.Position + a.Normal * (inner * run.Side), a.Position + a.Normal * (outer * run.Side),
-                            b.Position + b.Normal * (outer * run.Side), b.Position + b.Normal * (inner * run.Side), color);
+                        mesh.AddQuad(a.Position + a.Normal * (aInner * run.Side), a.Position + a.Normal * (aOuter * run.Side),
+                            b.Position + b.Normal * (bOuter * run.Side), b.Position + b.Normal * (bInner * run.Side), color);
                     }
                     from = to;
                 }
@@ -333,7 +346,7 @@ namespace Ghostline.Game
                     break;
                 TrackSample center = _track.GetSample(-behind);
                 float side = slot % 2 == 0 ? 1f : -1f;
-                Vector2 position = center.Position + center.Normal * (_track.RoadWidth * 0.25f * side);
+                Vector2 position = center.Position + center.Normal * (_track.GetRoadWidth(center.Distance) * 0.25f * side);
                 var candidate = new TrackGridSlot(position, center.Tangent, center.Distance, _gridSlotLength, _gridSlotWidth);
                 if (!GridSlotFits(candidate))
                     break;
@@ -352,7 +365,7 @@ namespace Ghostline.Game
                 for (int lateral = -1; lateral <= 1; lateral++)
                 {
                     Vector2 point = slot.Center + slot.Tangent * longitudinal + normal * (slot.Width * 0.5f * lateral);
-                    if (Mathf.Abs(Vector2.Dot(point - sample.Position, sample.Normal)) >= _track.RoadWidth * 0.5f - _edgeInset
+                    if (Mathf.Abs(Vector2.Dot(point - sample.Position, sample.Normal)) >= _track.GetRoadWidth(sample.Distance) * 0.5f - _edgeInset
                         || _track.InsideOtherRoad(point, sample.Distance))
                         return false;
                 }
@@ -392,8 +405,9 @@ namespace Ghostline.Game
                 TrackSample sample = _track.GetSample(_sectorDistances[i]);
                 // The checker covers the line center at start; its pink leading edge stays visible.
                 float offset = i == 0 ? -_checkerDepth * 0.5f : 0f;
+                float halfWidth = _track.GetRoadWidth(sample.Distance) * 0.5f;
                 AddRectangle(mesh, sample.Position + sample.Tangent * offset, sample.Tangent,
-                    -_sectorLineWidth * 0.5f, -_track.RoadWidth * 0.5f, _sectorLineWidth * 0.5f, _track.RoadWidth * 0.5f, colors[i]);
+                    -_sectorLineWidth * 0.5f, -halfWidth, _sectorLineWidth * 0.5f, halfWidth, colors[i]);
             }
             Assign(6, mesh);
         }
@@ -419,14 +433,15 @@ namespace Ghostline.Game
             var mesh = new ColoredMesh();
             TrackSample sample = _track.GetSample(0f);
             float square = _checkerDepth * 0.5f;
-            int columns = Mathf.CeilToInt(_track.RoadWidth / square);
+            float width = _track.GetRoadWidth(0f);
+            int columns = Mathf.CeilToInt(width / square);
             for (int row = 0; row < 2; row++)
                 for (int column = 0; column < columns; column++)
                 {
-                    float y = -_track.RoadWidth * 0.5f + column * square;
+                    float y = -width * 0.5f + column * square;
                     float x = -_checkerDepth * 0.5f + row * square;
                     AddRectangle(mesh, sample.Position, sample.Tangent, x, y, x + square,
-                        Mathf.Min(y + square, _track.RoadWidth * 0.5f), (row + column) % 2 == 0 ? _white : _black);
+                        Mathf.Min(y + square, width * 0.5f), (row + column) % 2 == 0 ? _white : _black);
                 }
             Assign(7, mesh);
         }

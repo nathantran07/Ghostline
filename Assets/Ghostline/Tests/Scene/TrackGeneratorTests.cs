@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Ghostline.Editor;
+using Ghostline.Core;
 using Ghostline.Game;
 using NUnit.Framework;
 using UnityEditor;
@@ -24,8 +25,9 @@ namespace Ghostline.Tests.Scene
                 Assert.That(track.GetComponent<SplineContainer>().Spline.Closed, Is.True);
                 Assert.That(track.GetComponent<SplineContainer>().Spline.Count, Is.InRange(50, 80));
                 Assert.That(track.Length, Is.InRange(600f, 900f));
-                Assert.That(track.ValidateRadius(), Is.True);
-                Assert.That(track.MinimumRadius, Is.GreaterThan(track.RequiredRadius));
+                Assert.That(track.RoadWidth, Is.EqualTo(2.93f).Within(0.0001f));
+                Assert.That(track.WidthLimits, Is.Not.Empty);
+                Assert.That(track.MinimumRadius, Is.GreaterThan(0f));
                 Assert.That(track.Crossings.Count, Is.EqualTo(1));
                 Assert.That(track.GetComponentsInChildren<MeshRenderer>(), Has.Length.EqualTo(10));
                 MeshFilter road = track.transform.Find("Generated Circuit/Road").GetComponent<MeshFilter>();
@@ -61,7 +63,8 @@ namespace Ghostline.Tests.Scene
                         Is.EqualTo(track.SampleSpacing).Within(track.SampleSpacing * 0.08f));
                     Assert.That(Vector2.Dot(sample.Tangent, sample.Normal), Is.Zero.Within(0.0001f));
                     Assert.That(Vector3.Distance(vertices[i * 2], vertices[i * 2 + 1]),
-                        Is.EqualTo(track.RoadWidth).Within(0.0001f));
+                        Is.EqualTo(track.GetRoadWidth(sample.Distance)).Within(0.0001f));
+                    Assert.That(track.GetRoadWidth(sample.Distance), Is.InRange(0.55f, track.RoadWidth));
                 }
             });
         }
@@ -138,7 +141,7 @@ namespace Ghostline.Tests.Scene
                     Assert.That(Vector2.Dot(fields.FindProperty("_forwardDirection").vector2Value, sample.Tangent), Is.GreaterThan(0.999f));
                     BoxCollider2D collider = gate.GetComponent<BoxCollider2D>();
                     Assert.That(collider.isTrigger, Is.True);
-                    Assert.That(collider.size.y * gate.transform.localScale.y, Is.EqualTo(track.RoadWidth).Within(0.001f));
+                    Assert.That(collider.size.y * gate.transform.localScale.y, Is.EqualTo(track.GetRoadWidth(sample.Distance)).Within(0.001f));
                 }
             });
         }
@@ -248,7 +251,7 @@ namespace Ghostline.Tests.Scene
         }
 
         [Test]
-        public void InvalidSettingsAndTightCornersFailWithArcLengthDiagnostics()
+        public void InvalidSettingsAreRejectedAndTightCornersReportLimitsWithoutErrors()
         {
             WithTrack(track =>
             {
@@ -256,17 +259,102 @@ namespace Ghostline.Tests.Scene
                 Assert.Throws<ArgumentOutOfRangeException>(() => track.Configure(material, 1));
                 Assert.Throws<ArgumentOutOfRangeException>(() => track.Configure(material, roadWidth: float.NaN));
                 var fields = new SerializedObject(track);
+                float originalWidth = track.RoadWidth;
                 fields.FindProperty("_roadWidth").floatValue = track.Length;
                 fields.ApplyModifiedPropertiesWithoutUndo();
-                LogAssert.Expect(LogType.Error, new Regex(@"Track corner at arc length \d+\.\d+ has radius \d+\.\d+; must exceed \d+\.\d+\."));
                 try
                 {
                     Assert.That(track.ValidateRadius(), Is.False);
                 }
                 finally
                 {
-                    fields.FindProperty("_roadWidth").floatValue = 2.2f;
+                    fields.FindProperty("_roadWidth").floatValue = originalWidth;
                     fields.ApplyModifiedPropertiesWithoutUndo();
+                }
+            });
+        }
+
+        [Test]
+        public void InspectorWidthChangeRegeneratesWallsAndGatesOnEnable()
+        {
+            WithTrack(track =>
+            {
+                var settings = new SerializedObject(track);
+                float original = track.RoadWidth;
+                try
+                {
+                    settings.FindProperty("_roadWidth").floatValue = 4f;
+                    settings.ApplyModifiedPropertiesWithoutUndo();
+                    track.enabled = false;
+                    track.enabled = true;
+                    settings.Update();
+                    foreach (CheckpointTrigger gate in track.GetComponentsInChildren<CheckpointTrigger>())
+                    {
+                        var fields = new SerializedObject(gate);
+                        float distance = fields.FindProperty("_isStartFinish").boolValue ? 0f
+                            : track.GateDistances[fields.FindProperty("_checkpointIndex").intValue];
+                        Assert.That(gate.transform.localScale.y, Is.EqualTo(track.GetRoadWidth(distance)).Within(0.001f));
+                    }
+                    Assert.That(settings.FindProperty("_builtRoadWidth").floatValue, Is.EqualTo(4f));
+                }
+                finally
+                {
+                    settings.Update();
+                    settings.FindProperty("_roadWidth").floatValue = original;
+                    settings.ApplyModifiedPropertiesWithoutUndo();
+                    track.Regenerate();
+                }
+            });
+        }
+
+        [Test]
+        public void WiderOffsetsAreSmoothedAndWallSegmentsNeverSelfIntersect()
+        {
+            WithTrack(track =>
+            {
+                Material material = track.GetComponentInChildren<MeshRenderer>().sharedMaterial;
+                RaceManager race = track.transform.parent.Find("RaceManager").GetComponent<RaceManager>();
+                float original = track.RoadWidth;
+                try
+                {
+                    track.Configure(material, roadWidth: 8f);
+                    track.Generate(race);
+                    Assert.That(track.WidthLimits, Is.Not.Empty);
+                    var settings = new SerializedObject(track);
+                    float slope = track.RoadWidth * 0.5f / settings.FindProperty("_offsetSmoothingLength").floatValue;
+                    for (int i = 0; i < track.Samples.Count; i++)
+                    {
+                        float a = track.GetSampleRoadWidth(i);
+                        float b = track.GetSampleRoadWidth((i + 1) % track.Samples.Count);
+                        Assert.That(Mathf.Abs(a - b), Is.LessThanOrEqualTo(2f * slope * track.SampleSpacing + 0.0001f));
+                    }
+                    var points = new System.Collections.Generic.List<TrackPoint>();
+                    var allowed = new System.Collections.Generic.List<bool>();
+                    var closurePairs = new System.Collections.Generic.HashSet<(int First, int Last)>();
+                    foreach (EdgeCollider2D wall in track.GetComponentsInChildren<EdgeCollider2D>())
+                    {
+                        Vector2[] path = wall.points;
+                        bool closed = path[0] == path[path.Length - 1];
+                        if (closed)
+                            closurePairs.Add((points.Count, points.Count + path.Length - 2));
+                        for (int i = 0; i < path.Length; i++)
+                        {
+                            points.Add(new TrackPoint(path[i].x, path[i].y));
+                            allowed.Add(i < path.Length - 1);
+                        }
+                    }
+                    TrackPoint[] vertices = points.ToArray();
+                    foreach (TrackIntersection hit in TrackOffsetGeometry.FindIntersections(vertices, allowed.ToArray(), vertices,
+                        new bool[vertices.Length], track.RoadWidth))
+                        Assert.That(closurePairs.Contains((Mathf.Min(hit.FirstIndex, hit.SecondIndex),
+                            Mathf.Max(hit.FirstIndex, hit.SecondIndex))), Is.True, "Non-adjacent wall segments intersect.");
+                    foreach (TrackWidthLimit limit in track.WidthLimits)
+                        TestContext.WriteLine($"Limited {limit.FromDistance:0.00}-{limit.ToDistance:0.00}: {limit.MinimumWidth:0.00}");
+                }
+                finally
+                {
+                    track.Configure(material, roadWidth: original);
+                    track.Generate(race);
                 }
             });
         }

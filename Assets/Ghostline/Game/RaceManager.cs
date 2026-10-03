@@ -26,6 +26,18 @@ namespace Ghostline.Game
 
         public int CheckpointCount => _session == null ? _checkpointCount : _session.Checkpoints.CheckpointCount;
 
+        public void SetSpawn(Vector2 position, float rotation)
+        {
+            _spawnPosition = position;
+            _spawnRotation = rotation;
+            if (Application.isPlaying)
+                return;
+            Quaternion orientation = Quaternion.Euler(0f, 0f, rotation);
+            _car?.transform.SetPositionAndRotation(position, orientation);
+            _ghost?.transform.SetPositionAndRotation(position, orientation);
+            _cameraFollow?.SnapToTarget();
+        }
+
         public void Configure(CarController car, GhostCarView ghost, HudView hud, CameraFollow cameraFollow,
             int checkpointCount = 12, Vector2? spawnPosition = null, float spawnRotation = -90f)
         {

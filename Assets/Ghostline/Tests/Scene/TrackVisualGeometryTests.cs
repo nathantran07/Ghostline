@@ -106,9 +106,9 @@ namespace Ghostline.Tests.Scene
                         TrackSample source = track.GetSample(distance);
                         float lateral = Mathf.Abs(Vector2.Dot((Vector2)points[offset + i] - source.Position, source.Normal));
                         if (quad.Layer == "Barriers" || quad.Layer == "Tire Walls")
-                            Assert.That(lateral, Is.GreaterThanOrEqualTo(track.RoadWidth * 0.5f + track.WallThickness - 0.0001f));
+                            Assert.That(lateral, Is.GreaterThanOrEqualTo(track.GetRoadWidth(distance) * 0.5f + track.WallThickness - 0.0001f));
                         else
-                            Assert.That(lateral, Is.LessThanOrEqualTo(track.RoadWidth * 0.5f - 0.0499f));
+                            Assert.That(lateral, Is.LessThanOrEqualTo(track.GetRoadWidth(distance) * 0.5f - 0.0499f));
                     }
                     Vector2 center = (points[offset] + points[offset + 1] + points[offset + 2] + points[offset + 3]) * 0.25f;
                     Assert.That(track.InsideOtherRoad(center, Mathf.Repeat((quad.FromDistance + quad.ToDistance) * 0.5f, track.Length)), Is.False);
