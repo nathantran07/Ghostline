@@ -174,6 +174,8 @@ namespace Ghostline.Tests.Scene
         {
             return new BestLapData
             {
+                Version = BestLapData.CurrentVersion,
+                TrackId = BestLapData.DefaultTrackId,
                 LapTime = 10f,
                 Splits = new[] { 6f },
                 Samples = new List<GhostSample>

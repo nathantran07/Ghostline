@@ -7774,6 +7774,7 @@ MonoBehaviour:
   _hud: {fileID: 81670815}
   _cameraFollow: {fileID: 1863307862}
   _checkpointCount: 12
+  _trackId: suzuka
   _spawnPosition: {x: 62.31211, y: 23.267277}
   _spawnRotation: -142.46931
 --- !u!1 &1745492562

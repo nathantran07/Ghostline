@@ -5,6 +5,20 @@ namespace Ghostline.Tests.EditMode
 {
     public sealed class RaceSessionTests
     {
+        [Test]
+        public void CompletedLapUsesConfiguredTrackIdentity()
+        {
+            var race = new RaceSession(1, trackId: "test-track");
+            race.CrossStartFinish(0f, 0f, 0f);
+            race.Tick(1f, 1f, 0f, 0f);
+            race.PassCheckpoint(0);
+            race.CrossStartFinish(1f, 0f, 0f);
+            Assert.That(race.CompletedLap.TrackId, Is.EqualTo("test-track"));
+            Assert.That(BestLapRepository.IsValid(race.CompletedLap, 1, "test-track"), Is.True);
+            Assert.That(BestLapRepository.IsValid(race.CompletedLap, 1), Is.False);
+            Assert.Throws<System.ArgumentException>(() => new RaceSession(1, trackId: " "));
+        }
+
         [TestCase(4)]
         [TestCase(12)]
         [TestCase(1)]
@@ -31,6 +45,8 @@ namespace Ghostline.Tests.EditMode
             Assert.That(race.CrossStartFinish(2f, 0f, 0f), Is.True);
             Assert.That(race.Timer.State, Is.EqualTo(LapTimerState.Finished));
             Assert.That(race.CompletedLap.LapTime, Is.EqualTo(2f));
+            Assert.That(race.CompletedLap.Version, Is.EqualTo(BestLapData.CurrentVersion));
+            Assert.That(race.CompletedLap.TrackId, Is.EqualTo(BestLapData.DefaultTrackId));
             Assert.That(race.CompletedLap.Samples[0].Time, Is.Zero);
             Assert.That(race.CrossStartFinish(2f, 0f, 0f), Is.False);
             race.Reset();

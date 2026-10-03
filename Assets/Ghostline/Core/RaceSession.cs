@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Ghostline.Core
@@ -7,10 +8,14 @@ namespace Ghostline.Core
     {
         private readonly GhostRecorder _recorder;
         private readonly List<float> _splits = new List<float>();
+        private readonly string _trackId;
 
         /// <summary>Creates a race with a positive checkpoint count and recording interval.</summary>
-        public RaceSession(int checkpointCount, float sampleInterval = 0.05f)
+        public RaceSession(int checkpointCount, float sampleInterval = 0.05f, string trackId = BestLapData.DefaultTrackId)
         {
+            if (string.IsNullOrWhiteSpace(trackId))
+                throw new ArgumentException("A track identity is required.", nameof(trackId));
+            _trackId = trackId;
             Timer = new LapTimer();
             Checkpoints = new CheckpointTracker(checkpointCount);
             _recorder = new GhostRecorder(sampleInterval);
@@ -39,6 +44,8 @@ namespace Ghostline.Core
             GhostRecording recording = _recorder.Complete(Timer.ElapsedTime, x, y, rotation);
             CompletedLap = new BestLapData
             {
+                Version = BestLapData.CurrentVersion,
+                TrackId = _trackId,
                 LapTime = Timer.ElapsedTime,
                 Splits = _splits.ToArray(),
                 Samples = new List<GhostSample>(recording.Samples)

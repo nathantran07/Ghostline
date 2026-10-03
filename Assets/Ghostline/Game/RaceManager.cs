@@ -16,6 +16,7 @@ namespace Ghostline.Game
         [SerializeField] private HudView _hud;
         [SerializeField] private CameraFollow _cameraFollow;
         [SerializeField, Min(1)] private int _checkpointCount = 12;
+        [SerializeField] private string _trackId = BestLapData.DefaultTrackId;
         [SerializeField] private Vector2 _spawnPosition = new Vector2(-2f, -6f);
         [SerializeField] private float _spawnRotation = -90f;
         private RaceSession _session;
@@ -61,14 +62,14 @@ namespace Ghostline.Game
                 enabled = false;
                 return;
             }
-            if (_checkpointCount <= 0)
+            if (_checkpointCount <= 0 || string.IsNullOrWhiteSpace(_trackId))
             {
-                Debug.LogError("Ghostline RaceManager needs a positive checkpoint count.", this);
+                Debug.LogError("Ghostline RaceManager needs a positive checkpoint count and track identity.", this);
                 enabled = false;
                 return;
             }
-            _session = new RaceSession(_checkpointCount);
-            _repository = new BestLapRepository(new JsonFileBestLapStorage(_checkpointCount), _checkpointCount);
+            _session = new RaceSession(_checkpointCount, trackId: _trackId);
+            _repository = new BestLapRepository(new JsonFileBestLapStorage(_checkpointCount, _trackId), _checkpointCount, _trackId);
             _bestLap = _repository.Load();
             Restart();
         }

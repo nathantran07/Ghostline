@@ -95,10 +95,60 @@ namespace Ghostline.Tests.EditMode
             Assert.Throws<ArgumentOutOfRangeException>(() => new BestLapRepository(new InMemoryStorage(), count));
         }
 
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(3)]
+        [TestCase(5)]
+        public void IncompatibleVersionsAreDiscardedAndCannotBeSaved(int version)
+        {
+            BestLapData lap = CreateLap(4f);
+            lap.Version = version;
+            var repository = new BestLapRepository(new InMemoryStorage { Data = lap }, 2);
+            Assert.That(repository.Load(), Is.Null);
+            Assert.Throws<ArgumentException>(() => repository.TrySave(lap));
+        }
+
+        [TestCase(null)]
+        [TestCase("")]
+        [TestCase("rectangle")]
+        [TestCase("Suzuka")]
+        public void MissingOrDifferentTrackIdentityIsDiscarded(string trackId)
+        {
+            BestLapData lap = CreateLap(4f);
+            lap.TrackId = trackId;
+            var repository = new BestLapRepository(new InMemoryStorage { Data = lap }, 2);
+            Assert.That(repository.Load(), Is.Null);
+        }
+
+        [Test]
+        public void CurrentLapCanReplaceAFasterIncompatibleRecord()
+        {
+            BestLapData old = CreateLap(1f);
+            old.Version = 3;
+            var storage = new InMemoryStorage { Data = old };
+            var repository = new BestLapRepository(storage, 2);
+            Assert.That(repository.TrySave(CreateLap(4f)), Is.True);
+            Assert.That(repository.Load().Version, Is.EqualTo(BestLapData.CurrentVersion));
+            Assert.That(repository.Load().TrackId, Is.EqualTo(BestLapData.DefaultTrackId));
+        }
+
+        [Test]
+        public void RepositoryRequiresTheConfiguredTrackIdentity()
+        {
+            BestLapData lap = CreateLap(2f);
+            lap.TrackId = "test-track";
+            var repository = new BestLapRepository(new InMemoryStorage(), 2, "test-track");
+            Assert.That(repository.TrySave(lap), Is.True);
+            Assert.That(repository.Load().TrackId, Is.EqualTo("test-track"));
+            Assert.Throws<ArgumentException>(() => new BestLapRepository(new InMemoryStorage(), 2, " "));
+        }
+
         private static BestLapData CreateLap(float time)
         {
             return new BestLapData
             {
+                Version = BestLapData.CurrentVersion,
+                TrackId = BestLapData.DefaultTrackId,
                 LapTime = time,
                 Splits = new[] { time * 0.25f, time * 0.75f },
                 Samples = new List<GhostSample>
@@ -128,6 +178,8 @@ namespace Ghostline.Tests.EditMode
             {
                 return data == null ? null : new BestLapData
                 {
+                    Version = data.Version,
+                    TrackId = data.TrackId,
                     LapTime = data.LapTime,
                     Splits = data.Splits == null ? null : (float[])data.Splits.Clone(),
                     Samples = data.Samples == null ? null : new List<GhostSample>(data.Samples)

@@ -134,7 +134,7 @@ namespace Ghostline.Tests.Scene
         }
 
         [Test]
-        public void VersionOneRectangleLapIsIgnoredAndVersionThreeLapRoundTrips()
+        public void VersionOneRectangleLapIsIgnoredAndVersionFourLapRoundTrips()
         {
             string directory = Path.Combine(Path.GetTempPath(), "GhostlineTests", Guid.NewGuid().ToString("N"));
             string path = Path.Combine(directory, "best-lap.json");
@@ -148,6 +148,8 @@ namespace Ghostline.Tests.Scene
                 Assert.That(storage.Load(), Is.Null);
                 var lap = new BestLapData
                 {
+                    Version = BestLapData.CurrentVersion,
+                    TrackId = BestLapData.DefaultTrackId,
                     LapTime = 2f,
                     Splits = new[] { 0.5f, 1.5f },
                     Samples = new List<GhostSample>
@@ -156,7 +158,7 @@ namespace Ghostline.Tests.Scene
                     }
                 };
                 storage.Save(lap);
-                Assert.That(File.ReadAllText(path), Does.Contain("\"Version\": 3"));
+                Assert.That(File.ReadAllText(path), Does.Contain("\"Version\": 4"));
                 BestLapData loaded = new JsonFileBestLapStorage(path, 2).Load();
                 Assert.That(loaded, Is.Not.Null);
                 Assert.That(loaded.LapTime, Is.EqualTo(lap.LapTime));
