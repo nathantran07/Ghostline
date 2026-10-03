@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using System.Collections;
+using Ghostline.Core;
 using Ghostline.Game;
 using NUnit.Framework;
 using UnityEditor.SceneManagement;
@@ -62,10 +63,10 @@ namespace Ghostline.Tests.Scene
                 Set(car, "_drag", 0.4f);
                 Set(car, "_throttle", 1f);
                 Set(car, "_smoothedThrottle", 1f);
-                car.Body.linearVelocity = Vector2.up * 15f;
+                car.Body.linearVelocity = Vector2.up * 22f;
                 Invoke(car, "FixedUpdate");
                 physics.Simulate(Time.fixedDeltaTime);
-                Assert.That(car.Body.linearVelocity.y, Is.GreaterThan(15f));
+                Assert.That(car.Body.linearVelocity.y, Is.GreaterThan(22f));
                 Set(car, "_throttle", 0f);
                 Set(car, "_smoothedThrottle", 0f);
                 for (int i = 0; i < 500; i++)
@@ -91,13 +92,16 @@ namespace Ghostline.Tests.Scene
                 car.Body.linearVelocity = Vector2.up * 5f;
                 Invoke(car, "FixedUpdate");
                 physics.Simulate(Time.fixedDeltaTime);
-                Assert.That(car.Body.linearVelocity.y, Is.InRange(0f, 4.5f));
-                car.Body.linearVelocity = Vector2.up * 0.4f;
+                Assert.That(car.Body.linearVelocity.y, Is.EqualTo(4.8f).Within(0.0001f));
+                car.Body.linearVelocity = Vector2.up * 0.31f;
                 Invoke(car, "FixedUpdate");
                 physics.Simulate(Time.fixedDeltaTime);
-                Assert.That(car.Body.linearVelocity.y, Is.Zero.Within(0.00001f));
-                Invoke(car, "FixedUpdate");
-                physics.Simulate(Time.fixedDeltaTime);
+                Assert.That(car.Body.linearVelocity.y, Is.InRange(0f, 0.3f));
+                for (int i = 0; i < 4 && car.Body.linearVelocity.y >= 0f; i++)
+                {
+                    Invoke(car, "FixedUpdate");
+                    physics.Simulate(Time.fixedDeltaTime);
+                }
                 Assert.That(car.Body.linearVelocity.y, Is.LessThan(0f));
                 car.ResetPose(Vector2.zero, 0f);
                 Assert.That(car.SmoothedThrottle, Is.Zero);
@@ -120,8 +124,10 @@ namespace Ghostline.Tests.Scene
                 Set(car, "_drag", 0f);
                 Set(car, "_engineBraking", 0f);
                 Set(car, "_wallSpeedLoss", 0.35f);
-                car.Body.position = Vector2.up;
-                car.Body.linearVelocity = Vector2.down * 10f;
+                car.GetComponent<BoxCollider2D>().size = new Vector2(0.55f, 0.1f);
+                Assert.That(car.Body.collisionDetectionMode, Is.EqualTo(CollisionDetectionMode2D.Continuous));
+                car.Body.position = Vector2.up * 0.18f;
+                car.Body.linearVelocity = Vector2.down * 18f;
                 Physics2D.SyncTransforms();
                 try
                 {
@@ -130,11 +136,92 @@ namespace Ghostline.Tests.Scene
                         Invoke(car, "FixedUpdate");
                         physics.Simulate(Time.fixedDeltaTime);
                     }
-                    Assert.That(car.Body.linearVelocity.y, Is.EqualTo(6.5f).Within(0.01f));
+                    Assert.That(car.Body.linearVelocity.y, Is.EqualTo(11.7f).Within(0.01f));
                 }
                 finally
                 {
                     UnityEngine.Object.DestroyImmediate(track);
+                }
+            });
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
+        public IEnumerator DefaultForcesReachHigherTerminalSpeedAndBrakeGradually()
+        {
+            yield return new EnterPlayMode();
+            WithCar((car, physics) =>
+            {
+                Set(car, "_throttle", 1f);
+                for (int i = 0; i < 500; i++)
+                {
+                    Invoke(car, "FixedUpdate");
+                    physics.Simulate(Time.fixedDeltaTime);
+                }
+                Assert.That(car.Body.linearVelocity.y, Is.EqualTo(18f).Within(0.05f));
+                Set(car, "_brake", true);
+                for (int i = 0; i < 10; i++)
+                {
+                    Invoke(car, "FixedUpdate");
+                    physics.Simulate(Time.fixedDeltaTime);
+                }
+                Assert.That(car.Body.linearVelocity.y, Is.InRange(14f, 14.4f), "Braking must retain forward speed after 0.2 seconds.");
+                int steps = 10;
+                while (car.Body.linearVelocity.y > 0.3f && steps < 200)
+                {
+                    Invoke(car, "FixedUpdate");
+                    physics.Simulate(Time.fixedDeltaTime);
+                    Assert.That(car.Body.linearVelocity.y, Is.GreaterThanOrEqualTo(0f));
+                    steps++;
+                }
+                Assert.That(steps * Time.fixedDeltaTime, Is.InRange(1.4f, 1.6f));
+            });
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
+        public IEnumerator GateAcceptsCrossingAtNewTerminalSpeedForDifferentStepPhases()
+        {
+            yield return new EnterPlayMode();
+            foreach (float phase in new[] { 0f, 0.25f, 0.5f, 0.75f })
+            WithCar((car, physics) =>
+            {
+                car.GetComponent<BoxCollider2D>().size = new Vector2(0.55f, 1.18f);
+                car.GetComponent<BoxCollider2D>().offset = new Vector2(0f, 0.08f);
+                var managerObject = new GameObject("Gate manager", typeof(HudView), typeof(RaceManager));
+                SceneManager.MoveGameObjectToScene(managerObject, car.gameObject.scene);
+                var gateObject = new GameObject("Gate", typeof(BoxCollider2D), typeof(CheckpointTrigger));
+                SceneManager.MoveGameObjectToScene(gateObject, car.gameObject.scene);
+                try
+                {
+                    RaceManager manager = managerObject.GetComponent<RaceManager>();
+                    manager.Configure(car, null, managerObject.GetComponent<HudView>(), null, 2);
+                    var session = new RaceSession(2);
+                    session.CrossStartFinish(0f, 0f, 0f);
+                    session.Tick(1f, 0f, 0f, 0f);
+                    Set(manager, "_session", session);
+                    var sequence = (StartSequence)typeof(RaceManager).GetField("_startSequence",
+                        BindingFlags.Instance | BindingFlags.NonPublic).GetValue(manager);
+                    sequence.Tick(4f);
+                    gateObject.GetComponent<BoxCollider2D>().size = new Vector2(3.4f, 0.25f);
+                    gateObject.GetComponent<CheckpointTrigger>().Configure(manager, false, 0, Vector2.up);
+                    Set(car, "_drag", 0f);
+                    Set(car, "_engineBraking", 0f);
+                    car.Body.position = Vector2.down * (1f + phase * 18f * Time.fixedDeltaTime);
+                    car.Body.linearVelocity = Vector2.up * 18f;
+                    Physics2D.SyncTransforms();
+                    for (int i = 0; i < 10; i++)
+                    {
+                        Invoke(car, "FixedUpdate");
+                        physics.Simulate(Time.fixedDeltaTime);
+                    }
+                    Assert.That(car.Body.position.y, Is.GreaterThan(1f));
+                    Assert.That(session.Checkpoints.NextCheckpointIndex, Is.EqualTo(1), "The actual gate callback must accept the crossing.");
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(gateObject);
+                    UnityEngine.Object.DestroyImmediate(managerObject);
                 }
             });
             yield return new ExitPlayMode();

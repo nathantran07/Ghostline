@@ -8613,7 +8613,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8784feff74da41dea441a413ad7a8e97, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Ghostline.Game::Ghostline.Game.CarController
-  _topSpeed: 12
+  _topSpeed: 18
   _maxAcceleration: 18
   _throttleRampTime: 0.4
   _accelCurve:
@@ -8649,9 +8649,9 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  _drag: 1.2
-  _engineBraking: 3
-  _brakeAcceleration: 30
+  _drag: 0.8
+  _engineBraking: 1.5
+  _brakeAcceleration: 6
   _reverseAcceleration: 8
   _reverseThreshold: 0.3
   _steering: 150

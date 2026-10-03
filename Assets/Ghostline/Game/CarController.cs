@@ -11,7 +11,7 @@ namespace Ghostline.Game
         [Header("Acceleration and resistance")]
         [FormerlySerializedAs("_speed")]
         [Tooltip("Reference speed for both curves. Actual terminal speed comes from force and drag balance.")]
-        [SerializeField, Min(0.1f)] private float _topSpeed = 12f;
+        [SerializeField, Min(0.1f)] private float _topSpeed = 18f;
         [FormerlySerializedAs("_acceleration")]
         [SerializeField, Min(0f)] private float _maxAcceleration = 18f;
         [SerializeField, Min(0f)] private float _throttleRampTime = 0.4f;
@@ -20,9 +20,9 @@ namespace Ghostline.Game
             new Keyframe(0f, 1f, -0.2f, -0.2f), new Keyframe(1f, 0.8f, -0.2f, -0.2f),
             new Keyframe(2f, 0.25f, -0.55f, -0.55f));
         [FormerlySerializedAs("_linearDamping")]
-        [SerializeField, Min(0f)] private float _drag = 1.2f;
-        [SerializeField, Min(0f)] private float _engineBraking = 3f;
-        [SerializeField, Min(0f)] private float _brakeAcceleration = 30f;
+        [SerializeField, Min(0f)] private float _drag = 0.8f;
+        [SerializeField, Min(0f)] private float _engineBraking = 1.5f;
+        [SerializeField, Min(0f)] private float _brakeAcceleration = 6f;
         [SerializeField, Min(0f)] private float _reverseAcceleration = 8f;
         [SerializeField, Min(0f)] private float _reverseThreshold = 0.3f;
         [Header("Steering and grip")]

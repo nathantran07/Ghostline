@@ -153,8 +153,8 @@ namespace Ghostline.Editor
             var track = new GameObject("Track", typeof(SplineContainer), typeof(TrackGenerator), typeof(TrackVisuals));
             track.transform.SetParent(root.transform, false);
             var positions = new float3[SuzukaNormalizedKnots.Length];
-            // The default driving curve and drag balance near 12 units/s; assume 60-75% average (7.2-9).
-            // A ~730-unit centerline gives ~81-101 s, or ~87 s at 70% of top speed.
+            // The default driving curve and drag balance near 18 units/s.
+            // Lap time must be measured by driving; tight corners lower the average speed.
             // Keep image aspect ratio (1280:720). Final width/radius validation sets scale,
             // rather than Suzuka's real dimensions; widen hairpin knots before narrowing road.
             const float layoutWidth = 300f;

@@ -194,6 +194,7 @@ namespace Ghostline.Tests.Scene
             Assert.That(Vector2.Dot(car.up, spawn.Tangent), Is.GreaterThan(0.999f));
             Assert.That(Vector2.Dot(ghost.up, spawn.Tangent), Is.GreaterThan(0.999f));
             Assert.That(car.GetComponent<Rigidbody2D>(), Is.Not.Null);
+            Assert.That(car.GetComponent<Rigidbody2D>().collisionDetectionMode, Is.EqualTo(CollisionDetectionMode2D.Continuous));
             BoxCollider2D collider = car.GetComponent<BoxCollider2D>();
             Assert.That(collider.isTrigger, Is.False);
             Assert.That(collider.size.x, Is.EqualTo(0.55f).Within(0.0001f));
