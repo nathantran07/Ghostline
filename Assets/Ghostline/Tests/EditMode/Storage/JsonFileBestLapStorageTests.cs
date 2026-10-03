@@ -50,7 +50,8 @@ namespace Ghostline.Tests.EditMode.Storage
         [TestCase(2)]
         [TestCase(3)]
         [TestCase(4)]
-        [TestCase(6)]
+        [TestCase(5)]
+        [TestCase(7)]
         public void OldVersionIsIgnoredEvenWithOtherwiseValidData(int version)
         {
             var storage = new JsonFileBestLapStorage(_path, 2);
@@ -123,7 +124,7 @@ namespace Ghostline.Tests.EditMode.Storage
         {
             var storage = new JsonFileBestLapStorage(_path, 2);
             storage.Save(CreateLap(2f));
-            File.WriteAllText(_path, File.ReadAllText(_path).Replace("\"Version\": " + BestLapData.CurrentVersion, "\"Version\": 4"));
+            File.WriteAllText(_path, File.ReadAllText(_path).Replace("\"Version\": " + BestLapData.CurrentVersion, "\"Version\": 5"));
             var root = new UnityEngine.GameObject("Ghost compatibility test", typeof(UnityEngine.SpriteRenderer), typeof(GhostCarView));
             try
             {

@@ -7,7 +7,7 @@ namespace Ghostline.Core
     [Serializable]
     public sealed class BestLapData
     {
-        public const int CurrentVersion = 5;
+        public const int CurrentVersion = 6;
         public const string DefaultTrackId = "suzuka";
         /// <summary>Gameplay/save revision; missing legacy metadata stays at version zero.</summary>
         public int Version;
