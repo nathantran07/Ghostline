@@ -179,7 +179,7 @@ namespace Ghostline.Editor
             carCollider.offset = new Vector2(0f, 0.08f);
             Rigidbody2D body = carObject.AddComponent<Rigidbody2D>();
             body.gravityScale = 0f;
-            body.linearDamping = 1.2f;
+            body.linearDamping = 0f;
             body.angularDamping = 8f;
             body.interpolation = RigidbodyInterpolation2D.Interpolate;
             body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;

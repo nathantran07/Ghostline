@@ -84,7 +84,8 @@ namespace Ghostline.Tests.Scene
                 Assert.That(GetField<float>(car, "_throttle"), Is.Zero);
                 Assert.That(GetField<float>(car, "_turn"), Is.Zero);
                 Assert.That(car.CanDrive, Is.True);
-                Assert.That(car.Body.linearDamping, Is.EqualTo(1.2f));
+                Assert.That(car.Body.linearDamping, Is.Zero);
+                Assert.That(GetField<float>(car, "_drag"), Is.EqualTo(1.2f));
                 Assert.That(car.Body.angularDamping, Is.EqualTo(8f));
             }
             finally
