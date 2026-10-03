@@ -42,7 +42,7 @@ Checkpoints are numbered 1 through 12 by default in the HUD (indices 0 through 1
 
 With a saved best, the delta beside the lap time updates at each accepted gate and at the finish: current lap-clock time minus the corresponding best split or duration. Negative values are green (ahead), positive values red (behind), and zero white; all show a sign and three decimals, such as **-0.142** or **+0.312**. Each value remains solid for two seconds, fades over the third, and is replaced by the next crossing or cleared on reset. The finish compares against the previous best before a faster lap replaces it. No saved best means no delta, including the first finish.
 
-Save format **3** adds checkpoint splits and ignores older formats **1 and 2**. The old saved best is unavailable until a new valid lap is saved.
+Save format **4** stores gameplay version and track ID (`suzuka`) with checkpoint splits. Missing or mismatched metadata discards the saved lap and ghost quietly, including format-3 records. A new valid lap can replace an incompatible record regardless of its old time.
 
 The ghost is hidden before the start and when there is no valid best lap. It replays the previous best on the current lap clock and remains at its final pose if the current attempt takes longer. A new best becomes the replay on the next reset. Lap timing and trigger detection use Unity's fixed physics steps; they do not estimate sub-step crossing times.
 
@@ -89,7 +89,7 @@ Core and its EditMode test assembly have `noEngineReferences: true`. Game refere
 
 **SolidSprite** uses `[ExecuteAlways]` to create a rectangle from `Texture2D.whiteTexture`. It applies Inspector color, world-unit size, and sorting order, preserves the SpriteRenderer's material, recreates sprites after scene loading, and releases each generated sprite when disabled. Size controls the object's local scale; use unit-sized BoxCollider2D components.
 
-**CarController** reads `Keyboard.current` and applies acceleration, speed limiting, speed-dependent steering, and exponential lateral grip to a Rigidbody2D. Inspector fields expose speed, acceleration, steering, grip, and damping. `ResetPose` clears motion and restores a planar spawn pose. `InputEnabled = false` ignores keyboard input and stops motion during the countdown; the existing `CanDrive` flag still stops driving after finish. Handling values are unchanged.
+**CarController** ramps throttle over 0.4 seconds and applies acceleration and proportional drag as Rigidbody2D forces. Terminal speed comes from force/drag balance; Top Speed is the curve reference. Inspector curves control acceleration and steering with speed. Coasting adds engine braking; S overrides W to brake and reverses near rest. Wall contacts remove the configured incoming-speed fraction. Reset clears input and motion; countdown and finish locking remain intact. Curve evaluation and handling math live in engine-free Core.
 
 **CameraFollow** smoothly follows the car on the XY plane while keeping camera Z at -10. Reset can snap the camera directly to the spawn position.
 
@@ -105,7 +105,7 @@ Core and its EditMode test assembly have `noEngineReferences: true`. Game refere
 
 ### Editor class
 
-**TrackGenerator** samples the closed spline by arc length, validates local bend radii, builds the road mesh and split EdgeCollider2D walls, and places configurable ordered gates clear of the crossover. Generated meshes are reconstructed when the saved scene loads. Road width defaults to 2.2 units, four times the car collider width.
+**TrackGenerator** builds the road, walls, and gates from a shared width profile. Road Width defaults to 2.93 units, about 33% wider. Core clamps and smooths corner offsets and detects non-adjacent wall intersections; the Console reports limited intervals and crossover clearance. Crossover walls stay open. Gates, grid positions, and road decorations follow effective local width. Use the component's **Regenerate Track** context menu after Inspector changes; changed width settings also regenerate physics and gates on reload.
 
 **TrackVisuals** builds static, combined unlit meshes from the same samples and crossover rule. White edge lines stay on the asphalt; red/white curbs follow the inside of qualifying corners, while metal barriers and tighter-corner white/red tire walls sit outside the existing wall colliders. Runs split at crossover gaps and drop below minimum length. The grid uses two staggered columns, checks complete footprints against the road and crossover, and puts the player in the front slot. The current short approach fits one slot and warns; up to ten are painted on a long enough straight. Pink, yellow, and blue sector lines use the start and existing gates nearest corner 8 (knot 30) and corner 15 (knot 65), with no new race logic. The checker replaces the start sprite while preserving its trigger.
 
@@ -117,7 +117,7 @@ The Inspector exposes Road Color on TrackGenerator and colors, grass margin, edg
 
 Stop Play mode. Open **Window > General > Test Runner > EditMode > Run All**. Core tests cover `LapTimerTests`, `CheckpointTrackerTests`, `GhostRecordingTests`, `GhostRecorderTests`, `BestLapRepositoryTests`, `RaceSessionTests`, `DeltaCalculatorTests`, and `StartSequenceTests`. Nested EditMode storage tests cover JSON split round trips, replacement, invalid splits, and older versions. Scene tests additionally cover generated geometry, crossover clearance, race wiring, car presentation, countdown input locking, HUD formatting/fading, and final deltas against the previous best.
 
-The tests cover timer transitions and events, ordered checkpoints, interpolated and clamped playback, angular wraparound, fixed recording intervals, complete endpoints, storage replacement and round-tripping through an in-memory fake, and an entire Core race attempt. Tests do not need a scene, sprite, camera, or physics simulation.
+Core tests need no engine objects, including the new curve, throttle, driving, offset/intersection, and save-identity cases. Scene tests cover geometry, rendering, and Inspector-curve parity. Physics tests automatically enter and exit Play mode to verify force/mass behavior, coasting, brake/reverse switching, and fractional wall impacts.
 
 For batch testing, close this project's Unity Editor first and open PowerShell at the repository root. Adjust the Editor executable path if Unity Hub is installed elsewhere. `Start-Process -Wait` waits for completion even though Unity is a Windows GUI executable:
 
@@ -127,7 +127,7 @@ $projectPath = (Get-Location).Path
 $testResultsPath = Join-Path $env:TEMP 'Ghostline-EditMode.xml'
 $testLogPath = Join-Path $env:TEMP 'Ghostline-EditMode.log'
 $arguments = @(
-    '-batchmode', '-nographics', '-runTests', '-testPlatform', 'EditMode',
+    '-batchmode', '-runTests', '-testPlatform', 'EditMode',
     '-projectPath', ('"' + $projectPath + '"'),
     '-testResults', ('"' + $testResultsPath + '"'),
     '-logFile', ('"' + $testLogPath + '"')
@@ -139,7 +139,7 @@ $testProcess.ExitCode
 $results.'test-run' | Select-Object result, total, passed, failed
 ```
 
-Expect exit code 0, `result = Passed`, and `failed = 0`. Omit `-nographics` to include GPU render checks. Inspect the specified log if no results file is produced. The Test Framework exits Unity when the run finishes; omit `-quit` when using `-runTests`. See Unity's [test command-line reference](https://docs.unity.com/en-us/engine/6000.7/manual/scripting/test-framework-introduction/reference-command-line).
+Expect exit code 0, `result = Passed`, and `failed = 0`. GPU checks require graphics. Inspect the log if no results file is produced. The Test Framework exits Unity when the run finishes; omit `-quit` with `-runTests`. See Unity's [test command-line reference](https://docs.unity.com/en-us/engine/6000.7/manual/scripting/test-framework-introduction/reference-command-line).
 
 Historical rectangle-track verification used the installed Editor against an isolated project copy: **24 EditMode cases passed**. Additional Editor checks passed JSON round-tripping/replacement, corrupt-save fallback, generated sprites with preserved default materials, and scene saving/reloading with the expected colliders, camera, HUD references, and no lights.
 
@@ -147,7 +147,7 @@ Before the Suzuka replacement, a temporary PlayMode smoke test also passed two d
 
 ## Save data
 
-The file is `ghostline-best-lap.json` in `Application.persistentDataPath`. With this project's current Company Name and Product Name, Windows uses `%USERPROFILE%\AppData\LocalLow\DefaultCompany\Ghostline\ghostline-best-lap.json`. This is outside the repository. Delete only that file with Play stopped to clear the best; R never deletes it. Format **3** stores checkpoint splits alongside duration and poses. Older/unknown versions, invalid samples, and invalid or missing splits are ignored. Storage and repository validation use the race's configured checkpoint count.
+The file is `ghostline-best-lap.json` in `Application.persistentDataPath`, normally `%USERPROFILE%\AppData\LocalLow\DefaultCompany\Ghostline\ghostline-best-lap.json` on Windows. R never deletes it. Format **4** stores version, track ID, splits, duration, and poses. Incompatible versions/tracks and invalid data are ignored. Validation uses the race's configured track identity and checkpoint count.
 
 The file's mutable JSON representation is intentionally separate from `GhostSample`: `JsonUtility` serializes fields, while the Core sample exposes readonly properties. A temporary-file write followed by replacement protects the existing save from incomplete writes; write failures retain the previous best and show a warning. No ghost data is uploaded.
 

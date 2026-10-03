@@ -17,14 +17,15 @@ The track has a generated racing visual layer: dark green grass, charcoal asphal
 
 | TrackGenerator setting | Default | Meaning |
 | --- | --- | --- |
-| Road Width | 2.2 | Four times the 0.55-unit car body collider width |
+| Road Width | 2.93 | Requested width, about 33% wider; tight corners narrow locally |
 | Wall Thickness | 0.2 | Wall mesh width and twice the EdgeCollider2D edge radius |
 | Sample Count | 2048 | Even arc-length samples around the closed loop |
 | Checkpoint Count | 12 | Ordered checkpoints in addition to start/finish |
-| Radius Margin | 0.3 | Minimum centerline radius must exceed half road width plus this margin |
+| Radius Margin | 0.3 | Clearance between the full inner wall and the local bend radius |
+| Offset Smoothing Length | 6 | Distance over which local width restrictions spread into adjacent samples |
 | Road Color | RGB 43/51/64 | Serialized dark asphalt tint; existing road geometry is retained |
 
-The width of the normalized image maps to 300 world units. Track length targets roughly 600-900 units. `CarController` limits speed to 12 units/s; average speed is assumed to be 60-75% of that ceiling, rather than top speed throughout the lap. Actual driving time depends on braking and steering. Widen tight corner knots, especially the hairpin, before changing road width. If validation fails, the Console names the tightest corner's arc length and radius; geometry generation stops.
+The normalized image maps to 300 world units and the centerline measures about 724 units. The default curve and drag balance near 12 units/s, without clamping speed. Tight corners narrow locally using Core offset safety and closed-loop smoothing. Console messages name each limited arc-length interval and its minimum width. Retained wall intersections receive further local reductions. Actual lap time needs a driven measurement.
 
 The road is one closed mesh strip. Visible walls are mesh strips over **EdgeCollider2D** polylines. All use the project's supplied URP **Sprite-Unlit-Default** material, with flat vertex colors and no lights. Meshes are transient and rebuilt on scene load; colliders and gates remain serialized in Main. Sample spacing must be no greater than a quarter road width.
 
@@ -54,7 +55,7 @@ The crossover is a flat intersection. Both spline passes continue straight. Wall
 
 Checkpoints are evenly spaced by arc length, then nudged clear of the crossover. Both arcs between the crossover passes contain at least one required gate. Each gate spans the full road width, is perpendicular to its tangent, and filters backward crossings using that tangent. Start/finish sits at knot zero. Player and ghost spawn in the front grid slot four units behind it, laterally offset into the first column; the race reset pose and camera snap use the same pose. The current short approach fits **one slot** before the previous bend at the default curvature limit, so generation logs the required warning. The generator paints up to ten slots when the available straight permits them and checks the full rectangle, not just its center. If none fit, it warns and uses the existing centerline fallback behind the start.
 
-To change geometry, edit the builder knots and rebuild. To change the gate count or widths, pass matching settings to `TrackGenerator.Configure` in the builder and rebuild. `RaceManager.Configure` receives the generator's count and spawn pose automatically. Core remains free of Unity dependencies.
+For spline geometry, edit builder knots and rebuild. For width, edit TrackGenerator's Inspector settings and use its **Regenerate Track** context menu; width changes also regenerate walls and gates when the component enables. Road meshes, walls, triggers, grid columns, and reset spawn share effective width. Gate-count changes still require matching RaceManager configuration. Core remains free of Unity dependencies.
 
 ## Car sprite and physics
 
@@ -69,7 +70,7 @@ Each car root has unit scale and a **Visual** child at local position zero, unit
 
 The existing ghost shader recolors the yellow artwork blue while preserving details. No car uses SolidSprite. Car retains a **BoxCollider2D** size `(0.55,1.18)` with offset `(0,0.08)`, plus a dynamic **Rigidbody2D**: gravity 0, damping 1.2/8, Interpolate, Continuous. The ghost has no collider or rigidbody.
 
-`CarController` defaults remain Speed 12, Acceleration 18, Steering 150, Grip 12, Linear Damping 1.2, Angular Damping 8. No driving parameters are changed by the track replacement.
+`CarController` defaults: Top Speed reference 12, Max Acceleration 18, Throttle Ramp Time 0.4, Drag 1.2, Engine Braking 3, Brake Acceleration 30, Reverse Acceleration 8, Reverse Threshold 0.3, Steering 150, Minimum Steering Speed 2, Grip 12, Angular Damping 8, and Wall Speed Loss 0.35. Rigidbody linear damping is zero because the controller supplies drag force. Accel Curve uses speed / Top Speed on X and acceleration multiplier on Y; Steering Curve uses absolute forward speed / Top Speed and turn-rate multiplier. W/Up ramps throttle up; releasing ramps it down. S/Down takes braking priority and powers reverse near rest. Wall contacts retain 65% of incoming speed by default, including head-on impacts.
 
 ## Scene wiring
 
@@ -87,7 +88,7 @@ If a road or gate is black, check its renderer material is **Sprite-Unlit-Defaul
 2. Follow corners 1-18 and pass gates in order. Continue straight at both crossover visits. Turning there to skip a loop must leave an expected gate unpassed; backward and out-of-order entries must not advance progress.
 3. Finish after all twelve gates. Time freezes, the best updates if faster, and driving stops. Press **R**: position, heading, velocity, timer, splits, and camera reset together; delta clears and the countdown restarts with driving locked.
 4. Start another attempt. A valid saved best appears as a translucent blue Lambo, without collisions, only after the timer starts. Each accepted gate shows current split minus best split. Check signed three-decimal values and green/red colors, fading by about three seconds; rejected gate entries must not refresh the display. At finish, the delta uses the previous best even if the lap sets a new record. The first lap has no delta. A slower lap retains the best. Re-enter Play and check disk persistence.
-5. Versions **1 and 2** are ignored; the new format is **3**, with splits in gate order. Old saves clear the available best until a new valid lap is saved. Corrupt saves or splits with an incorrect count, nonfinite/negative/decreasing times, or times beyond the lap duration produce no ghost or delta. The default save path is `%USERPROFILE%\AppData\LocalLow\DefaultCompany\Ghostline\ghostline-best-lap.json`; Company/Product settings can change it. Clear only that file when resetting best laps.
+5. Save format **4** includes version, track ID (`suzuka`), and ordered splits. Missing or mismatched identity/version, including version 3, quietly produces no best, ghost, or delta until a new valid lap is saved. Invalid splits and poses are also ignored. The default save path is `%USERPROFILE%\AppData\LocalLow\DefaultCompany\Ghostline\ghostline-best-lap.json`; Company/Product settings can change it.
 6. Run **Window > General > Test Runner > EditMode > Run All**. Builder tests require batch mode to bypass interactive scene-replacement dialogs. GPU tests require graphics; omit `-nographics`. Expect zero failed tests. Batch tests export ignored `Logs/LamboPreview.png`, `Logs/SuzukaPreview.png`, `Logs/RacingStartPreview.png`, and `Logs/RacingCornerPreview.png` for visual checks. Geometry tests also cover visual sorting, curvature-side selection, short-run rejection, crossover paint clearance, spatial-index equivalence to the exhaustive wall rule, complete grid footprints, a ten-slot clear approach, sector anchors, and mesh regeneration without collider/gate changes.
 7. In **File > Build Profiles**, place Main first in the enabled Scene List and remove SampleScene. Build to an ignored Build/ or Builds/ directory. The builder leaves build profiles unchanged.
 
