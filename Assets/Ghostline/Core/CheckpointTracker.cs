@@ -18,6 +18,8 @@ namespace Ghostline.Core
 
         /// <summary>Raised once when all checkpoints and the finish crossing are accepted.</summary>
         public event Action LapCompleted;
+        /// <summary>Gets the total number of checkpoints required before the finish crossing.</summary>
+        public int CheckpointCount => _checkpointCount;
         /// <summary>Gets the next expected checkpoint, or the count when all have been passed.</summary>
         public int NextCheckpointIndex { get; private set; }
 

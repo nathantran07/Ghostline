@@ -18,6 +18,7 @@ namespace Ghostline.Game
 
         public Rigidbody2D Body => _body;
         public bool CanDrive { get; set; } = true;
+        public bool InputEnabled { get; set; } = true;
 
         private void Awake()
         {
@@ -34,7 +35,7 @@ namespace Ghostline.Game
             Keyboard keyboard = Keyboard.current;
             _throttle = 0f;
             _turn = 0f;
-            if (!CanDrive || keyboard == null)
+            if (!CanDrive || !InputEnabled || keyboard == null)
                 return;
             if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed)
                 _throttle += 1f;
@@ -48,7 +49,7 @@ namespace Ghostline.Game
 
         private void FixedUpdate()
         {
-            if (!CanDrive)
+            if (!CanDrive || !InputEnabled)
             {
                 Stop();
                 return;

@@ -2,18 +2,119 @@ using System;
 using System.IO;
 using Ghostline.Game;
 using TMPro;
+using Unity.Mathematics;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Splines;
 using UnityEngine.UI;
 
 namespace Ghostline.Editor
 {
-    /// <summary>Builds the asset-free game scene using the project's existing URP configuration.</summary>
+    /// <summary>Builds the game scene using Lambo car art and the project's existing URP configuration.</summary>
     public static class GhostlineSceneBuilder
     {
         public const string ScenePath = "Assets/Scenes/Main.unity";
+        private const string CarSpritePath = "Assets/Ghostline/Game/Art/LAMBO.png";
+        private const float CarLength = 1.4f;
+
+        // Trace of the colored centerline in docs/reference/suzuka-layout.png (1280 x 720).
+        // x = pixelX / 1280; y = 1 - pixelY / 720, so Unity Y points up.
+        // Driving order starts at the checkered flag; both crossover passes stay on their road.
+        // Hand-tune only this normalized array; corner groups follow the reference labels.
+        private static readonly Vector2[] SuzukaNormalizedKnots =
+        {
+            // Start/finish and straight into corner 1.
+            new Vector2(0.71406f, 0.61667f),
+            new Vector2(0.87969f, 0.25417f),
+            // Corners 1-2.
+            new Vector2(0.89375f, 0.21528f),
+            new Vector2(0.89609f, 0.18333f),
+            new Vector2(0.88516f, 0.13611f),
+            new Vector2(0.87109f, 0.12083f),
+            new Vector2(0.85469f, 0.12500f),
+            new Vector2(0.84297f, 0.14722f),
+            new Vector2(0.82812f, 0.18889f),
+            // Corners 3-4.
+            new Vector2(0.81172f, 0.23611f),
+            new Vector2(0.79922f, 0.25556f),
+            new Vector2(0.76406f, 0.26389f),
+            new Vector2(0.75078f, 0.27639f),
+            new Vector2(0.74375f, 0.29861f),
+            // Corners 5-7: S curves.
+            new Vector2(0.73828f, 0.33472f),
+            new Vector2(0.73125f, 0.36806f),
+            new Vector2(0.71641f, 0.39028f),
+            new Vector2(0.66563f, 0.40833f),
+            new Vector2(0.65469f, 0.43194f),
+            new Vector2(0.65391f, 0.46111f),
+            new Vector2(0.66094f, 0.50000f),
+            new Vector2(0.66641f, 0.53611f),
+            new Vector2(0.66250f, 0.56806f),
+            new Vector2(0.64844f, 0.59028f),
+            new Vector2(0.62578f, 0.61111f),
+            new Vector2(0.60234f, 0.62222f),
+            new Vector2(0.57969f, 0.62083f),
+            new Vector2(0.55937f, 0.60694f),
+            new Vector2(0.53906f, 0.58056f),
+            new Vector2(0.51562f, 0.54028f),
+            // Corners 8-9.
+            new Vector2(0.49844f, 0.50139f),
+            new Vector2(0.48672f, 0.47917f),
+            new Vector2(0.46094f, 0.47361f),
+            new Vector2(0.43281f, 0.46944f),
+            new Vector2(0.41875f, 0.47778f),
+            new Vector2(0.41563f, 0.50278f),
+            // Corners 10-11: widened hairpin.
+            new Vector2(0.39844f, 0.66806f),
+            new Vector2(0.39609f, 0.70000f),
+            new Vector2(0.40156f, 0.73472f),
+            new Vector2(0.41172f, 0.77500f),
+            new Vector2(0.41328f, 0.79167f),
+            new Vector2(0.40781f, 0.80556f),
+            new Vector2(0.39766f, 0.80278f),
+            new Vector2(0.38984f, 0.78472f),
+            new Vector2(0.37344f, 0.74028f),
+            // Corner 12.
+            new Vector2(0.35625f, 0.69444f),
+            new Vector2(0.34219f, 0.67361f),
+            new Vector2(0.32188f, 0.65972f),
+            new Vector2(0.29844f, 0.65278f),
+            new Vector2(0.27344f, 0.65833f),
+            new Vector2(0.20547f, 0.70694f),
+            new Vector2(0.18906f, 0.73611f),
+            // Corners 13-14: upper-left loop.
+            new Vector2(0.16172f, 0.84167f),
+            new Vector2(0.15234f, 0.87778f),
+            new Vector2(0.13984f, 0.90000f),
+            new Vector2(0.11953f, 0.90417f),
+            new Vector2(0.10000f, 0.89444f),
+            new Vector2(0.08672f, 0.87361f),
+            new Vector2(0.08125f, 0.84722f),
+            new Vector2(0.08594f, 0.82222f),
+            new Vector2(0.09922f, 0.79722f),
+            // Back straight through crossover to corner 15.
+            new Vector2(0.13750f, 0.74444f),
+            new Vector2(0.25156f, 0.63194f),
+            new Vector2(0.32812f, 0.58194f),
+            new Vector2(0.40859f, 0.53750f),
+            new Vector2(0.43047f, 0.52778f),
+            new Vector2(0.45391f, 0.53889f),
+            new Vector2(0.47578f, 0.55694f),
+            // Corners 16-18: chicane and return to start.
+            new Vector2(0.51953f, 0.62500f),
+            new Vector2(0.55781f, 0.68056f),
+            new Vector2(0.57266f, 0.69861f),
+            new Vector2(0.58203f, 0.69167f),
+            new Vector2(0.59297f, 0.67639f),
+            new Vector2(0.60469f, 0.68056f),
+            new Vector2(0.61953f, 0.70139f),
+            new Vector2(0.63516f, 0.70833f),
+            new Vector2(0.65391f, 0.70278f),
+            new Vector2(0.67734f, 0.68194f),
+            new Vector2(0.69844f, 0.65278f),
+        };
 
         [MenuItem("Tools/Ghostline/Build Scene")]
         public static void BuildScene()
@@ -39,29 +140,43 @@ namespace Ghostline.Editor
                     return;
             }
 
+            Sprite carSprite = LoadCarSprite();
+            Material playerMaterial = AssetDatabase.LoadAssetAtPath<Material>(
+                "Packages/com.unity.render-pipelines.universal/Runtime/Materials/Sprite-Unlit-Default.mat");
+            Material ghostMaterial = AssetDatabase.LoadAssetAtPath<Material>(
+                "Assets/Ghostline/Game/Art/GhostSprite.mat");
+            if (playerMaterial == null || ghostMaterial == null)
+                throw new InvalidOperationException("Ghostline needs the URP unlit and GhostSprite materials.");
+
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var root = new GameObject("Ghostline");
-            var track = new GameObject("Track");
+            var track = new GameObject("Track", typeof(SplineContainer), typeof(TrackGenerator), typeof(TrackVisuals));
             track.transform.SetParent(root.transform, false);
-            CreateRectangle("Road", track.transform, Vector2.zero, new Vector2(24f, 16f),
-                new Color(0.17f, 0.2f, 0.25f), 0);
-            CreateRectangle("Infield", track.transform, Vector2.zero, new Vector2(16f, 8f),
-                new Color(0.055f, 0.07f, 0.09f), 1);
-            var walls = new GameObject("Walls");
-            walls.transform.SetParent(track.transform, false);
-            CreateWall("Outer Top", walls.transform, new Vector2(0f, 8f), new Vector2(24.7f, 0.5f));
-            CreateWall("Outer Bottom", walls.transform, new Vector2(0f, -8f), new Vector2(24.7f, 0.5f));
-            CreateWall("Outer Left", walls.transform, new Vector2(-12f, 0f), new Vector2(0.5f, 16.5f));
-            CreateWall("Outer Right", walls.transform, new Vector2(12f, 0f), new Vector2(0.5f, 16.5f));
-            CreateWall("Inner Top", walls.transform, new Vector2(0f, 4f), new Vector2(16.5f, 0.5f));
-            CreateWall("Inner Bottom", walls.transform, new Vector2(0f, -4f), new Vector2(16.5f, 0.5f));
-            CreateWall("Inner Left", walls.transform, new Vector2(-8f, 0f), new Vector2(0.5f, 8.5f));
-            CreateWall("Inner Right", walls.transform, new Vector2(8f, 0f), new Vector2(0.5f, 8.5f));
+            var positions = new float3[SuzukaNormalizedKnots.Length];
+            // CarController caps speed at 12 units/s; assume 60-75% average (7.2-9).
+            // A ~730-unit centerline gives ~81-101 s, or ~87 s at 70% of top speed.
+            // Keep image aspect ratio (1280:720). Final width/radius validation sets scale,
+            // rather than Suzuka's real dimensions; widen hairpin knots before narrowing road.
+            const float layoutWidth = 300f;
+            for (int i = 0; i < positions.Length; i++)
+            {
+                Vector2 knot = SuzukaNormalizedKnots[i] - Vector2.one * 0.5f;
+                positions[i] = new float3(knot.x * layoutWidth, knot.y * layoutWidth * 720f / 1280f, 0f);
+            }
+            track.GetComponent<SplineContainer>().Spline = new Spline(positions, TangentMode.AutoSmooth, true);
+            TrackGenerator generator = track.GetComponent<TrackGenerator>();
+            generator.Configure(playerMaterial);
+            TrackVisuals visuals = track.GetComponent<TrackVisuals>();
+            // Corner 8 begins at knot 30; knot 65 is the corner 15 apex after the crossover.
+            visuals.Configure(18f, CarLength, 0.55f, 30, 65);
+            TrackSample spawn = visuals.GetSpawnSample(generator);
+            float spawnRotation = Mathf.Atan2(spawn.Tangent.y, spawn.Tangent.x) * Mathf.Rad2Deg - 90f;
 
-            GameObject carObject = CreateRectangle("Car", root.transform, new Vector2(-2f, -6f),
-                new Vector2(0.8f, 1.4f), new Color(0.1f, 0.8f, 0.95f), 5);
-            carObject.transform.rotation = Quaternion.Euler(0f, 0f, -90f);
-            AddUnitCollider(carObject, false);
+            GameObject carObject = CreateCar("Car", root.transform, carSprite, Color.white, 5, playerMaterial,
+                spawn.Position, spawnRotation);
+            BoxCollider2D carCollider = carObject.AddComponent<BoxCollider2D>();
+            carCollider.size = new Vector2(0.55f, 1.18f);
+            carCollider.offset = new Vector2(0f, 0.08f);
             Rigidbody2D body = carObject.AddComponent<Rigidbody2D>();
             body.gravityScale = 0f;
             body.linearDamping = 1.2f;
@@ -70,15 +185,14 @@ namespace Ghostline.Editor
             body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
             CarController car = carObject.AddComponent<CarController>();
 
-            GameObject ghostObject = CreateRectangle("Ghost", root.transform, new Vector2(-2f, -6f),
-                new Vector2(0.8f, 1.4f), new Color(0.8f, 0.95f, 1f, 0.3f), 4);
-            ghostObject.transform.rotation = Quaternion.Euler(0f, 0f, -90f);
+            GameObject ghostObject = CreateCar("Ghost", root.transform, carSprite,
+                new Color(0.8f, 0.95f, 1f, 0.4f), 4, ghostMaterial, spawn.Position, spawnRotation);
             GhostCarView ghost = ghostObject.AddComponent<GhostCarView>();
 
             var cameraObject = new GameObject("Main Camera", typeof(Camera), typeof(AudioListener));
             cameraObject.tag = "MainCamera";
             cameraObject.transform.SetParent(root.transform, false);
-            cameraObject.transform.position = new Vector3(-2f, -6f, -10f);
+            cameraObject.transform.position = new Vector3(spawn.Position.x, spawn.Position.y, -10f);
             Camera camera = cameraObject.GetComponent<Camera>();
             camera.orthographic = true;
             camera.orthographicSize = 9f;
@@ -91,19 +205,9 @@ namespace Ghostline.Editor
             var raceObject = new GameObject("RaceManager", typeof(RaceManager));
             raceObject.transform.SetParent(root.transform, false);
             RaceManager race = raceObject.GetComponent<RaceManager>();
-            race.Configure(car, ghost, hud, cameraFollow);
-            var checkpoints = new GameObject("Checkpoints");
-            checkpoints.transform.SetParent(root.transform, false);
-            CreateCheckpoint("Start Finish", checkpoints.transform, race, true, 0,
-                new Vector2(0f, -6f), new Vector2(0.25f, 4f), Vector2.right);
-            CreateCheckpoint("Checkpoint 1", checkpoints.transform, race, false, 0,
-                new Vector2(10f, 0f), new Vector2(4f, 0.25f), Vector2.up);
-            CreateCheckpoint("Checkpoint 2", checkpoints.transform, race, false, 1,
-                new Vector2(0f, 6f), new Vector2(0.25f, 4f), Vector2.left);
-            CreateCheckpoint("Checkpoint 3", checkpoints.transform, race, false, 2,
-                new Vector2(-10f, 0f), new Vector2(4f, 0.25f), Vector2.down);
-            CreateCheckpoint("Checkpoint 4", checkpoints.transform, race, false, 3,
-                new Vector2(-5f, -6f), new Vector2(0.25f, 4f), Vector2.right);
+            race.Configure(car, ghost, hud, cameraFollow, generator.CheckpointCount, spawn.Position, spawnRotation);
+            generator.Generate(race);
+            cameraFollow.SnapToTarget();
 
             if (!AssetDatabase.IsValidFolder("Assets/Scenes"))
                 AssetDatabase.CreateFolder("Assets", "Scenes");
@@ -113,38 +217,53 @@ namespace Ghostline.Editor
             Debug.Log("Ghostline scene saved to " + ScenePath + ". See SCENE_SETUP.md for Play and material checks.");
         }
 
-        private static GameObject CreateRectangle(string name, Transform parent, Vector2 position,
-            Vector2 size, Color color, int sortingOrder)
+        private static Sprite LoadCarSprite()
         {
-            var rectangle = new GameObject(name, typeof(SpriteRenderer), typeof(SolidSprite));
-            rectangle.transform.SetParent(parent, false);
-            rectangle.transform.localPosition = new Vector3(position.x, position.y, 0f);
-            rectangle.GetComponent<SolidSprite>().Configure(color, size, sortingOrder);
-            return rectangle;
+            var importer = AssetImporter.GetAtPath(CarSpritePath) as TextureImporter;
+            if (importer == null)
+                throw new InvalidOperationException("Ghostline needs the car sprite at " + CarSpritePath);
+            importer.GetSourceTextureWidthAndHeight(out int width, out int height);
+            if (width <= 0 || height <= 0)
+                throw new InvalidOperationException("Ghostline could not read the car sprite dimensions.");
+            var settings = new TextureImporterSettings();
+            importer.ReadTextureSettings(settings);
+            settings.textureType = TextureImporterType.Sprite;
+            settings.spriteMode = (int)SpriteImportMode.Single;
+            settings.spriteAlignment = (int)SpriteAlignment.Center;
+            settings.spritePivot = new Vector2(0.5f, 0.5f);
+            settings.spritePixelsPerUnit = height / CarLength;
+            settings.spriteMeshType = SpriteMeshType.FullRect;
+            settings.filterMode = FilterMode.Bilinear;
+            settings.wrapMode = TextureWrapMode.Clamp;
+            settings.mipmapEnabled = false;
+            settings.alphaIsTransparency = true;
+            importer.SetTextureSettings(settings);
+            importer.maxTextureSize = 2048;
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.SaveAndReimport();
+            Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(CarSpritePath);
+            if (sprite == null)
+                throw new InvalidOperationException("Ghostline could not import " + CarSpritePath + " as a Sprite.");
+            return sprite;
         }
 
-        private static void CreateWall(string name, Transform parent, Vector2 position, Vector2 size)
+        private static GameObject CreateCar(string name, Transform parent, Sprite sprite, Color color,
+            int sortingOrder, Material material, Vector2 position, float rotation)
         {
-            GameObject wall = CreateRectangle(name, parent, position, size,
-                new Color(0.42f, 0.47f, 0.54f), 3);
-            AddUnitCollider(wall, false);
-        }
-
-        private static void AddUnitCollider(GameObject gameObject, bool isTrigger)
-        {
-            BoxCollider2D collider = gameObject.AddComponent<BoxCollider2D>();
-            collider.size = Vector2.one;
-            collider.offset = Vector2.zero;
-            collider.isTrigger = isTrigger;
-        }
-
-        private static void CreateCheckpoint(string name, Transform parent, RaceManager race,
-            bool isStartFinish, int checkpointIndex, Vector2 position, Vector2 size, Vector2 forward)
-        {
-            GameObject checkpoint = CreateRectangle(name, parent, position, size,
-                isStartFinish ? Color.white : new Color(1f, 0.65f, 0.15f, 0.7f), 2);
-            AddUnitCollider(checkpoint, true);
-            checkpoint.AddComponent<CheckpointTrigger>().Configure(race, isStartFinish, checkpointIndex, forward);
+            var car = new GameObject(name);
+            car.transform.SetParent(parent, false);
+            car.transform.localPosition = position;
+            car.transform.localRotation = Quaternion.Euler(0f, 0f, rotation);
+            var visual = new GameObject("Visual", typeof(SpriteRenderer));
+            visual.transform.SetParent(car.transform, false);
+            // FixedUpdate drives along local up; the supplied sprite's nose points down.
+            visual.transform.localRotation = Quaternion.Euler(0f, 0f, 180f);
+            SpriteRenderer renderer = visual.GetComponent<SpriteRenderer>();
+            renderer.sprite = sprite;
+            renderer.color = color;
+            renderer.sortingOrder = sortingOrder;
+            renderer.sharedMaterial = material;
+            return car;
         }
 
         private static HudView CreateHud(Transform parent)
@@ -164,8 +283,19 @@ namespace Ghostline.Editor
                 28f, "Best  --");
             TMP_Text status = CreateText("Status", canvasObject.transform, new Vector2(24f, -112f),
                 22f, "Cross the white line to start | WASD / arrows | R: restart");
+            TMP_Text countdown = CreateText("Countdown", canvasObject.transform, Vector2.zero, 96f, "3");
+            RectTransform countdownRectangle = countdown.rectTransform;
+            countdownRectangle.anchorMin = new Vector2(0.5f, 0.5f);
+            countdownRectangle.anchorMax = new Vector2(0.5f, 0.5f);
+            countdownRectangle.pivot = new Vector2(0.5f, 0.5f);
+            countdownRectangle.sizeDelta = new Vector2(400f, 160f);
+            countdown.alignment = TextAlignmentOptions.Center;
+            TMP_Text delta = CreateText("Ghost Delta", canvasObject.transform, new Vector2(280f, -24f),
+                28f, string.Empty);
+            delta.rectTransform.sizeDelta = new Vector2(200f, 42f);
+            delta.enabled = false;
             HudView hud = canvasObject.AddComponent<HudView>();
-            hud.Configure(current, best, status);
+            hud.Configure(current, best, status, countdown, delta);
             return hud;
         }
 

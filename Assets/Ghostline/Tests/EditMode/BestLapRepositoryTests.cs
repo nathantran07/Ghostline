@@ -11,7 +11,7 @@ namespace Ghostline.Tests.EditMode
         public void SavesFirstLapAndReplacesOnlyWhenStrictlyFaster()
         {
             var storage = new InMemoryStorage();
-            var repository = new BestLapRepository(storage);
+            var repository = new BestLapRepository(storage, 2);
             Assert.That(repository.Load(), Is.Null);
             Assert.That(repository.TrySave(CreateLap(10f)), Is.True);
             Assert.That(repository.TrySave(CreateLap(11f)), Is.False);
@@ -25,20 +25,26 @@ namespace Ghostline.Tests.EditMode
         public void RoundTripsThroughStorageWithoutSharingMutableLists()
         {
             var storage = new InMemoryStorage();
-            new BestLapRepository(storage).TrySave(CreateLap(4f));
-            BestLapData loaded = new BestLapRepository(storage).Load();
+            var candidate = CreateLap(4f);
+            new BestLapRepository(storage, 2).TrySave(candidate);
+            candidate.Splits[0] = 99f;
+            BestLapData loaded = new BestLapRepository(storage, 2).Load();
             Assert.That(loaded.LapTime, Is.EqualTo(4f));
             Assert.That(loaded.Samples.Count, Is.EqualTo(2));
             Assert.That(loaded.Samples[1].X, Is.EqualTo(10f));
+            Assert.That(loaded.Splits, Is.EqualTo(new[] { 1f, 3f }));
+            loaded.Splits[0] = 99f;
             loaded.Samples.Clear();
-            Assert.That(new BestLapRepository(storage).Load().Samples.Count, Is.EqualTo(2));
+            BestLapData reloaded = new BestLapRepository(storage, 2).Load();
+            Assert.That(reloaded.Samples.Count, Is.EqualTo(2));
+            Assert.That(reloaded.Splits, Is.EqualTo(new[] { 1f, 3f }));
         }
 
         [Test]
         public void InvalidStoredDataFallsBackToNoLapAndInvalidCandidatesAreRejected()
         {
             var storage = new InMemoryStorage { Data = new BestLapData() };
-            var repository = new BestLapRepository(storage);
+            var repository = new BestLapRepository(storage, 2);
             Assert.That(repository.Load(), Is.Null);
             Assert.Throws<ArgumentException>(() => repository.TrySave(new BestLapData()));
             storage.Data = CreateLap(3f);
@@ -46,11 +52,55 @@ namespace Ghostline.Tests.EditMode
             Assert.That(repository.Load(), Is.Null);
         }
 
+        [TestCaseSource(nameof(InvalidSplits))]
+        public void InvalidSplitsAreRejectedOnSaveAndLoad(float[] splits)
+        {
+            BestLapData candidate = CreateLap(4f);
+            candidate.Splits = splits;
+            var storage = new InMemoryStorage { Data = candidate };
+            var repository = new BestLapRepository(storage, 2);
+            Assert.That(repository.Load(), Is.Null);
+            Assert.Throws<ArgumentException>(() => repository.TrySave(candidate));
+            Assert.That(storage.SaveCount, Is.Zero);
+        }
+
+        private static IEnumerable<TestCaseData> InvalidSplits()
+        {
+            yield return new TestCaseData(new object[] { null });
+            yield return new TestCaseData(new object[] { new float[0] });
+            yield return new TestCaseData(new object[] { new[] { 1f } });
+            yield return new TestCaseData(new object[] { new[] { 1f, 2f, 3f } });
+            yield return new TestCaseData(new object[] { new[] { float.NaN, 2f } });
+            yield return new TestCaseData(new object[] { new[] { 1f, float.PositiveInfinity } });
+            yield return new TestCaseData(new object[] { new[] { float.NegativeInfinity, 2f } });
+            yield return new TestCaseData(new object[] { new[] { -1f, 2f } });
+            yield return new TestCaseData(new object[] { new[] { 2f, 1f } });
+            yield return new TestCaseData(new object[] { new[] { 1f, 4.01f } });
+        }
+
+        [Test]
+        public void EqualSplitsAndBoundaryTimesAreValid()
+        {
+            BestLapData lap = CreateLap(4f);
+            lap.Splits = new[] { 0f, 0f };
+            Assert.That(BestLapRepository.IsValid(lap, 2), Is.True);
+            lap.Splits = new[] { 4f, 4f };
+            Assert.That(BestLapRepository.IsValid(lap, 2), Is.True);
+        }
+
+        [TestCase(0)]
+        [TestCase(-1)]
+        public void RepositoryRejectsNonPositiveCheckpointCount(int count)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => new BestLapRepository(new InMemoryStorage(), count));
+        }
+
         private static BestLapData CreateLap(float time)
         {
             return new BestLapData
             {
                 LapTime = time,
+                Splits = new[] { time * 0.25f, time * 0.75f },
                 Samples = new List<GhostSample>
                 {
                     new GhostSample(0f, 0f, 0f, 0f), new GhostSample(time, 10f, 0f, 90f)
@@ -79,6 +129,7 @@ namespace Ghostline.Tests.EditMode
                 return data == null ? null : new BestLapData
                 {
                     LapTime = data.LapTime,
+                    Splits = data.Splits == null ? null : (float[])data.Splits.Clone(),
                     Samples = data.Samples == null ? null : new List<GhostSample>(data.Samples)
                 };
             }

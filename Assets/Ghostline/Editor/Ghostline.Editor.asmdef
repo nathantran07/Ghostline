@@ -1,6 +1,6 @@
 {
   "name": "Ghostline.Editor",
   "rootNamespace": "Ghostline.Editor",
-  "references": ["Ghostline.Core", "Ghostline.Game", "Unity.TextMeshPro", "UnityEngine.UI"],
+  "references": ["Ghostline.Core", "Ghostline.Game", "Unity.TextMeshPro", "UnityEngine.UI", "Unity.Splines", "Unity.Mathematics"],
   "includePlatforms": ["Editor"]
 }

@@ -7,7 +7,7 @@ namespace Ghostline.Game
     {
         [SerializeField] private RaceManager _raceManager;
         [SerializeField] private bool _isStartFinish;
-        [SerializeField, Range(0, 3)] private int _checkpointIndex;
+        [SerializeField, Min(0)] private int _checkpointIndex;
         [SerializeField] private Vector2 _forwardDirection = Vector2.right;
 
         public void Configure(RaceManager raceManager, bool isStartFinish,

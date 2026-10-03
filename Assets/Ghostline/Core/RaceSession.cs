@@ -6,6 +6,7 @@ namespace Ghostline.Core
     public sealed class RaceSession
     {
         private readonly GhostRecorder _recorder;
+        private readonly List<float> _splits = new List<float>();
 
         /// <summary>Creates a race with a positive checkpoint count and recording interval.</summary>
         public RaceSession(int checkpointCount, float sampleInterval = 0.05f)
@@ -13,12 +14,15 @@ namespace Ghostline.Core
             Timer = new LapTimer();
             Checkpoints = new CheckpointTracker(checkpointCount);
             _recorder = new GhostRecorder(sampleInterval);
+            Splits = _splits.AsReadOnly();
         }
 
         /// <summary>Gets the attempt's lap timer.</summary>
         public LapTimer Timer { get; }
         /// <summary>Gets the attempt's ordered checkpoint progress.</summary>
         public CheckpointTracker Checkpoints { get; }
+        /// <summary>Gets accepted checkpoint entry times in gate order.</summary>
+        public IReadOnlyList<float> Splits { get; }
         /// <summary>Gets completed lap data, or null until a valid finish crossing.</summary>
         public BestLapData CompletedLap { get; private set; }
 
@@ -36,6 +40,7 @@ namespace Ghostline.Core
             CompletedLap = new BestLapData
             {
                 LapTime = Timer.ElapsedTime,
+                Splits = _splits.ToArray(),
                 Samples = new List<GhostSample>(recording.Samples)
             };
             Timer.Finish();
@@ -45,7 +50,10 @@ namespace Ghostline.Core
         /// <summary>Accepts a checkpoint only during a running attempt.</summary>
         public bool PassCheckpoint(int checkpointIndex)
         {
-            return Timer.State == LapTimerState.Running && Checkpoints.TryPass(checkpointIndex);
+            if (Timer.State != LapTimerState.Running || !Checkpoints.TryPass(checkpointIndex))
+                return false;
+            _splits.Add(Timer.ElapsedTime);
+            return true;
         }
 
         /// <summary>Advances the timer and supplies the car pose at the same lap time.</summary>
@@ -61,6 +69,7 @@ namespace Ghostline.Core
         {
             Timer.Reset();
             Checkpoints.Reset();
+            _splits.Clear();
             CompletedLap = null;
         }
     }

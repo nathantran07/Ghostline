@@ -1,0 +1,8 @@
+{
+  "name": "Ghostline.Tests.Scene",
+  "rootNamespace": "Ghostline.Tests.Scene",
+  "references": ["Ghostline.Core", "Ghostline.Game", "Ghostline.Editor", "Unity.Splines", "Unity.Mathematics", "Unity.TextMeshPro", "UnityEngine.UI"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "autoReferenced": false
+}
