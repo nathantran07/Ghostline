@@ -208,6 +208,7 @@ namespace Ghostline.Editor
             race.Configure(car, ghost, hud, cameraFollow, generator.CheckpointCount, spawn.Position, spawnRotation);
             generator.Generate(race);
             cameraFollow.SnapToTarget();
+            GhostlineMinimapInstaller.AddToScene(scene);
 
             if (!AssetDatabase.IsValidFolder("Assets/Scenes"))
                 AssetDatabase.CreateFolder("Assets", "Scenes");
