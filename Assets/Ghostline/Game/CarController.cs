@@ -20,7 +20,7 @@ namespace Ghostline.Game
             new Keyframe(0f, 1f, -0.2f, -0.2f), new Keyframe(1f, 0.8f, -0.2f, -0.2f),
             new Keyframe(2f, 0.25f, -0.55f, -0.55f));
         [FormerlySerializedAs("_linearDamping")]
-        [SerializeField, Min(0f)] private float _drag = 0.8f;
+        [SerializeField, Min(0f)] private float _drag = 0.85f;
         [SerializeField, Min(0f)] private float _engineBraking = 1.5f;
         [SerializeField, Min(0f)] private float _brakeAcceleration = 6f;
         [SerializeField, Min(0f)] private float _reverseAcceleration = 8f;

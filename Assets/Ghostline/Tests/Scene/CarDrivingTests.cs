@@ -92,7 +92,7 @@ namespace Ghostline.Tests.Scene
                 car.Body.linearVelocity = Vector2.up * 5f;
                 Invoke(car, "FixedUpdate");
                 physics.Simulate(Time.fixedDeltaTime);
-                Assert.That(car.Body.linearVelocity.y, Is.EqualTo(4.8f).Within(0.0001f));
+                Assert.That(car.Body.linearVelocity.y, Is.EqualTo(4.795f).Within(0.0001f));
                 car.Body.linearVelocity = Vector2.up * 0.31f;
                 Invoke(car, "FixedUpdate");
                 physics.Simulate(Time.fixedDeltaTime);
@@ -158,14 +158,14 @@ namespace Ghostline.Tests.Scene
                     Invoke(car, "FixedUpdate");
                     physics.Simulate(Time.fixedDeltaTime);
                 }
-                Assert.That(car.Body.linearVelocity.y, Is.EqualTo(18f).Within(0.05f));
+                Assert.That(car.Body.linearVelocity.y, Is.EqualTo(17.14f).Within(0.05f));
                 Set(car, "_brake", true);
                 for (int i = 0; i < 10; i++)
                 {
                     Invoke(car, "FixedUpdate");
                     physics.Simulate(Time.fixedDeltaTime);
                 }
-                Assert.That(car.Body.linearVelocity.y, Is.InRange(14f, 14.4f), "Braking must retain forward speed after 0.2 seconds.");
+                Assert.That(car.Body.linearVelocity.y, Is.InRange(13.2f, 13.5f), "Braking must retain forward speed after 0.2 seconds.");
                 int steps = 10;
                 while (car.Body.linearVelocity.y > 0.3f && steps < 200)
                 {
@@ -174,7 +174,7 @@ namespace Ghostline.Tests.Scene
                     Assert.That(car.Body.linearVelocity.y, Is.GreaterThanOrEqualTo(0f));
                     steps++;
                 }
-                Assert.That(steps * Time.fixedDeltaTime, Is.InRange(1.4f, 1.6f));
+                Assert.That(steps * Time.fixedDeltaTime, Is.EqualTo(1.4f).Within(Time.fixedDeltaTime));
             });
             yield return new ExitPlayMode();
         }

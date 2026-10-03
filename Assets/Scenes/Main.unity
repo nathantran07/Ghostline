@@ -9722,7 +9722,7 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  _drag: 0.8
+  _drag: 0.85
   _engineBraking: 1.5
   _brakeAcceleration: 6
   _reverseAcceleration: 8
