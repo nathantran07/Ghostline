@@ -98,7 +98,8 @@ namespace Ghostline.Tests.EditMode
         [TestCase(0)]
         [TestCase(1)]
         [TestCase(3)]
-        [TestCase(5)]
+        [TestCase(4)]
+        [TestCase(6)]
         public void IncompatibleVersionsAreDiscardedAndCannotBeSaved(int version)
         {
             BestLapData lap = CreateLap(4f);

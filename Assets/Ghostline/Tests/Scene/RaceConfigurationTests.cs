@@ -158,7 +158,7 @@ namespace Ghostline.Tests.Scene
                     }
                 };
                 storage.Save(lap);
-                Assert.That(File.ReadAllText(path), Does.Contain("\"Version\": 4"));
+                Assert.That(File.ReadAllText(path), Does.Contain("\"Version\": " + BestLapData.CurrentVersion));
                 BestLapData loaded = new JsonFileBestLapStorage(path, 2).Load();
                 Assert.That(loaded, Is.Not.Null);
                 Assert.That(loaded.LapTime, Is.EqualTo(lap.LapTime));
