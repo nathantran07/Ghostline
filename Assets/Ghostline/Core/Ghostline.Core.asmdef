@@ -1,0 +1,6 @@
+{
+  "name": "Ghostline.Core",
+  "rootNamespace": "Ghostline.Core",
+  "references": [],
+  "noEngineReferences": true
+}

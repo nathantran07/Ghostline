@@ -1,0 +1,9 @@
+{
+  "name": "Ghostline.Tests.EditMode",
+  "rootNamespace": "Ghostline.Tests.EditMode",
+  "references": ["Ghostline.Core"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "autoReferenced": false,
+  "noEngineReferences": true
+}
