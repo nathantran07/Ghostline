@@ -25,7 +25,7 @@ namespace Ghostline.Tests.Scene
                 Assert.That(track.GetComponent<SplineContainer>().Spline.Closed, Is.True);
                 Assert.That(track.GetComponent<SplineContainer>().Spline.Count, Is.InRange(50, 80));
                 Assert.That(track.Length, Is.InRange(600f, 900f));
-                Assert.That(track.RoadWidth, Is.EqualTo(2.93f).Within(0.0001f));
+                Assert.That(track.RoadWidth, Is.EqualTo(3.4f).Within(0.0001f));
                 Assert.That(track.WidthLimits, Is.Not.Empty);
                 Assert.That(track.MinimumRadius, Is.GreaterThan(0f));
                 Assert.That(track.Crossings.Count, Is.EqualTo(1));
@@ -309,8 +309,9 @@ namespace Ghostline.Tests.Scene
             });
         }
 
-        [Test]
-        public void WiderOffsetsAreSmoothedAndWallSegmentsNeverSelfIntersect()
+        [TestCase(3.4f)]
+        [TestCase(8f)]
+        public void WiderOffsetsAreSmoothedAndWallSegmentsNeverSelfIntersect(float width)
         {
             WithTrack(track =>
             {
@@ -319,7 +320,7 @@ namespace Ghostline.Tests.Scene
                 float original = track.RoadWidth;
                 try
                 {
-                    track.Configure(material, roadWidth: 8f);
+                    track.Configure(material, roadWidth: width);
                     track.Generate(race);
                     Assert.That(track.WidthLimits, Is.Not.Empty);
                     var settings = new SerializedObject(track);

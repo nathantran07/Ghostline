@@ -11,7 +11,7 @@ namespace Ghostline.Game
     [RequireComponent(typeof(SplineContainer))]
     public sealed class TrackGenerator : MonoBehaviour
     {
-        [SerializeField, Min(0.1f)] private float _roadWidth = 2.93f;
+        [SerializeField, Min(0.1f)] private float _roadWidth = 3.4f;
         [SerializeField, Min(0.01f)] private float _wallThickness = 0.2f;
         [SerializeField, Range(128, 8192)] private int _sampleCount = 2048;
         [SerializeField, Min(2)] private int _checkpointCount = 12;
@@ -79,7 +79,7 @@ namespace Ghostline.Game
             return denominator > 0.000001f ? 2f * Cross(b - a, c - a) / denominator : 0f;
         }
 
-        public void Configure(Material material, int checkpointCount = 12, float roadWidth = 2.93f,
+        public void Configure(Material material, int checkpointCount = 12, float roadWidth = 3.4f,
             float wallThickness = 0.2f, int sampleCount = 2048)
         {
             if (material == null)
