@@ -13,11 +13,11 @@ The track has a generated racing visual layer: dark green grass, charcoal asphal
 
 1. Open your edited Main scene and stop Play mode. Use **Tools > Ghostline > Add Minimap To Scene** to preserve the existing track and scene edits. Do not use **Build Scene** for this installation: that command still replaces Main.
 2. The installer creates **HUD Canvas/Minimap**, containing a **Track** RawImage with **Ghost Dot** and **Player Dot** Images. It wires the track, car, ghost, race, and UI references automatically. Re-running it reuses the panel/dots, repairs a missing dot, and preserves MinimapView tuning. Installation supports Undo and marks the scene dirty; save Main yourself.
-3. Select **HUD Canvas/Minimap** and tune the serialized **MinimapView** fields below. The existing Canvas Scaler controls UI scale. Default placement is bottom-left, away from the top-left lap time and ghost delta.
+3. Select **HUD Canvas/Minimap** and tune the serialized **MinimapView** fields below. The existing Canvas Scaler controls UI scale. Default placement is top-right, away from the top-left lap time and ghost delta, at 30% of canvas height (1.5 times the original side length). Existing installed panels retain their serialized height: set **Height Fraction = 0.30** to enlarge one that still uses 0.20, then re-run the installer to refresh its Editor layout and save Main.
 
 | MinimapView setting | Default | Meaning |
 | --- | --- | --- |
-| Height Fraction / Panel Offset | 0.2 / (24, 24) | Square panel height as a fraction of canvas height; offset in scaled canvas units from bottom-left |
+| Height Fraction / Panel Offset | 0.3 / (24, 24) | Square panel height as a fraction of canvas height; positive inset in scaled canvas units from the top and right edges |
 | Texture Resolution / Padding | 256 / 16 | Square runtime texture resolution; padding in texture pixels, leaving room for ticks and dots |
 | Line Width / Tick Width / Tick Length | 3 / 3 / 12 | Texture pixels; line edges use simple distance-based smoothing |
 | Player Dot Size / Ghost Dot Size | 8 / 7 | Dot diameters in scaled canvas units |
@@ -33,7 +33,7 @@ With a valid saved ghost, its dot appears at the configured spawn during **3/2/1
 
 Run **Window > General > Test Runner > EditMode** and select **MinimapViewTests** / **MinimapInstallerTests**, or **Run All**. The 14 new scene cases need no scene installation, saved ghost, batch mode, TMP-resource import, or extra test assembly setup. They clean up their own objects and preview scene. The 23 projection cases live in **MinimapProjectionTests** under the engine-free Core test assembly.
 
-Manual Play review: check that the line/tick match the track orientation, both dots align with the centerline, the player outline stays legible, and the bottom-left panel avoids your HUD edits. Resize the Game view to check scaling. Check no-ghost, countdown spawn, running playback, playback end, finish, and **R** restart. Automated checks do not replace this visual review.
+Manual Play review: check that the line/tick match the track orientation, both dots align with the centerline, the player outline stays legible, and the larger top-right panel avoids your HUD edits. Resize the Game view to check scaling. Check no-ghost, countdown spawn, running playback, playback end, finish, and **R** restart. Automated checks do not replace this visual review.
 
 ## Track geometry and tuning
 

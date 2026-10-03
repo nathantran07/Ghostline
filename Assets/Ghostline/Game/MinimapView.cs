@@ -15,7 +15,7 @@ namespace Ghostline.Game
         [SerializeField] private RawImage _map;
         [SerializeField] private Image _playerDot;
         [SerializeField] private Image _ghostDot;
-        [SerializeField, Range(0.05f, 0.4f)] private float _heightFraction = 0.2f;
+        [SerializeField, Range(0.05f, 0.4f)] private float _heightFraction = 0.3f;
         [SerializeField] private Vector2 _panelOffset = new Vector2(24f, 24f);
         [SerializeField, Range(64, 1024)] private int _textureResolution = 256;
         [SerializeField, Min(0f)] private float _padding = 16f;
@@ -121,10 +121,10 @@ namespace Ghostline.Game
                 _canvasRect = (RectTransform)_map.canvas.rootCanvas.transform;
             if (_canvasRect == null)
                 return;
-            _panel.anchorMin = Vector2.zero;
-            _panel.anchorMax = Vector2.zero;
-            _panel.pivot = Vector2.zero;
-            _panel.anchoredPosition = _panelOffset;
+            _panel.anchorMin = Vector2.one;
+            _panel.anchorMax = Vector2.one;
+            _panel.pivot = Vector2.one;
+            _panel.anchoredPosition = -_panelOffset;
             float size = _canvasRect.rect.height * _heightFraction;
             _panel.sizeDelta = new Vector2(size, size);
             RectTransform mapRect = _map.rectTransform;

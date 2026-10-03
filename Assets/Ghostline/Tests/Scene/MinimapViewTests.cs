@@ -143,18 +143,18 @@ namespace Ghostline.Tests.Scene
         }
 
         [Test]
-        public void ResizeKeepsSameTextureAndDotAlignmentAtTwentyPercentCanvasHeight()
+        public void ResizeKeepsSameTextureAndDotAlignmentAtThirtyPercentCanvasHeight()
         {
             Invoke(_view, "Start");
             _player.position = Vector3.zero;
             Invoke(_view, "LateUpdate");
             Texture texture = _map.texture;
             RectTransform canvas = (RectTransform)_map.canvas.transform;
-            Assert.That(_map.rectTransform.rect.height, Is.EqualTo(canvas.rect.height * 0.2f).Within(0.01f));
-            SetField(_view, "_heightFraction", 0.3f);
+            Assert.That(_map.rectTransform.rect.height, Is.EqualTo(canvas.rect.height * 0.3f).Within(0.01f));
+            SetField(_view, "_heightFraction", 0.2f);
             Invoke(_view, "LateUpdate");
             float size = _map.rectTransform.rect.height;
-            Assert.That(size, Is.EqualTo(canvas.rect.height * 0.3f).Within(0.01f));
+            Assert.That(size, Is.EqualTo(canvas.rect.height * 0.2f).Within(0.01f));
             Assert.That(_playerDot.rectTransform.anchoredPosition, Is.EqualTo(new Vector2(size * 0.5f, -size * 0.5f)));
             Assert.That(_map.texture, Is.SameAs(texture));
         }

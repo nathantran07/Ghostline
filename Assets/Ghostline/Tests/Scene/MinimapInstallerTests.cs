@@ -71,19 +71,21 @@ namespace Ghostline.Tests.Scene
         }
 
         [Test]
-        public void WiresAllReferencesUsesDefaultSpritesAndPlacesPanelAwayFromTopHud()
+        public void WiresAllReferencesUsesDefaultSpritesAndPlacesLargerPanelAtTopRight()
         {
             MinimapView view = GhostlineMinimapInstaller.AddToScene(_scene);
             var serialized = new SerializedObject(view);
             foreach (string field in new[] { "_track", "_player", "_ghost", "_race", "_background", "_map", "_playerDot", "_ghostDot" })
                 Assert.That(serialized.FindProperty(field).objectReferenceValue, Is.Not.Null, field);
             RectTransform panel = (RectTransform)view.transform;
-            Assert.That(panel.anchorMin, Is.EqualTo(Vector2.zero));
-            Assert.That(panel.anchorMax, Is.EqualTo(Vector2.zero));
-            Assert.That(panel.anchoredPosition, Is.EqualTo(new Vector2(24f, 24f)));
-            Assert.That(panel.rect.height, Is.EqualTo(((RectTransform)_canvas.transform).rect.height * 0.2f).Within(0.01f));
-            Assert.That(panel.rect.height + panel.anchoredPosition.y,
-                Is.LessThan(((RectTransform)_canvas.transform).rect.height - 154f));
+            Assert.That(panel.anchorMin, Is.EqualTo(Vector2.one));
+            Assert.That(panel.anchorMax, Is.EqualTo(Vector2.one));
+            Assert.That(panel.pivot, Is.EqualTo(Vector2.one));
+            Assert.That(panel.anchoredPosition, Is.EqualTo(new Vector2(-24f, -24f)));
+            Rect canvasRect = ((RectTransform)_canvas.transform).rect;
+            Assert.That(panel.rect.height, Is.EqualTo(canvasRect.height * 0.3f).Within(0.01f));
+            Assert.That(canvasRect.width - panel.rect.width + panel.anchoredPosition.x,
+                Is.GreaterThan(480f), "The panel must stay right of the lap time and delta at the reference resolution.");
             Image[] images = view.GetComponentsInChildren<Image>();
             foreach (Image image in images)
             {
