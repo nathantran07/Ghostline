@@ -1,6 +1,6 @@
 # Ghostline
 
-A small top-down Unity 2D time-trial game built as a software engineering portfolio project. Drive a rectangular loop, pass four checkpoints in order, and cross the start/finish line. A faster completed lap is saved locally and becomes a translucent replay car on later attempts and later runs.
+A small top-down Unity 2D time-trial game project. Drive a rectangular loop, pass four checkpoints in order, and cross the start/finish line. A faster completed lap is saved locally and becomes a translucent replay car on later attempts and later runs.
 
 ![Ghostline gameplay showing the rectangular track, player car, saved ghost, and lap HUD](docs/images/ghostline-gameplay.png)
 
