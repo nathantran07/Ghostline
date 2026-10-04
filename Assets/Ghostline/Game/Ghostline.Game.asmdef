@@ -1,5 +1,5 @@
 {
   "name": "Ghostline.Game",
   "rootNamespace": "Ghostline.Game",
-  "references": ["Ghostline.Core", "Unity.InputSystem", "Unity.TextMeshPro", "UnityEngine.UI"]
+  "references": ["Ghostline.Core", "Unity.InputSystem", "Unity.TextMeshPro", "UnityEngine.UI", "Unity.Splines", "Unity.Mathematics"]
 }

@@ -1,0 +1,8 @@
+{
+  "name": "Ghostline.Tests.Storage",
+  "rootNamespace": "Ghostline.Tests.EditMode.Storage",
+  "references": ["Ghostline.Core", "Ghostline.Game"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "autoReferenced": false
+}

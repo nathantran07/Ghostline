@@ -1,17 +1,19 @@
+using System;
 using Ghostline.Core;
 using UnityEngine;
 
 namespace Ghostline.Game
 {
-    [RequireComponent(typeof(SpriteRenderer), typeof(SolidSprite))]
     public sealed class GhostCarView : MonoBehaviour
     {
         private GhostRecording _recording;
         private SpriteRenderer _renderer;
 
+        public bool HasRecording => _recording != null;
+        public float PlaybackDuration => _recording == null ? 0f : _recording.Samples[_recording.Samples.Count - 1].Time;
+
         private void Awake()
         {
-            _renderer = GetComponent<SpriteRenderer>();
             Hide();
         }
 
@@ -37,7 +39,9 @@ namespace Ghostline.Game
         public void Hide()
         {
             if (_renderer == null)
-                _renderer = GetComponent<SpriteRenderer>();
+                _renderer = GetComponentInChildren<SpriteRenderer>(true);
+            if (_renderer == null)
+                throw new InvalidOperationException("GhostCarView needs a child SpriteRenderer.");
             _renderer.enabled = false;
         }
     }

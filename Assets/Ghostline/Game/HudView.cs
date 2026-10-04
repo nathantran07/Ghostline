@@ -1,3 +1,4 @@
+using System.Globalization;
 using Ghostline.Core;
 using TMPro;
 using UnityEngine;
@@ -9,12 +10,67 @@ namespace Ghostline.Game
         [SerializeField] private TMP_Text _currentTimeText;
         [SerializeField] private TMP_Text _bestTimeText;
         [SerializeField] private TMP_Text _statusText;
+        [SerializeField] private TMP_Text _countdownText;
+        [SerializeField] private TMP_Text _deltaText;
+        private const float DeltaDisplaySeconds = 3f;
+        private const float DeltaFadeSeconds = 1f;
+        private float _deltaSecondsRemaining;
+        private StartGantryView _startGantry;
 
-        public void Configure(TMP_Text currentTimeText, TMP_Text bestTimeText, TMP_Text statusText)
+        public void Configure(TMP_Text currentTimeText, TMP_Text bestTimeText, TMP_Text statusText,
+            TMP_Text countdownText = null, TMP_Text deltaText = null)
         {
             _currentTimeText = currentTimeText;
             _bestTimeText = bestTimeText;
             _statusText = statusText;
+            _countdownText = countdownText;
+            _deltaText = deltaText;
+        }
+
+        public void RenderCountdown(StartSequence sequence)
+        {
+            if (_countdownText == null)
+                return;
+            if (_startGantry == null)
+            {
+                var gantryObject = new GameObject("Start Gantry", typeof(RectTransform), typeof(StartGantryView));
+                gantryObject.hideFlags = HideFlags.DontSave;
+                gantryObject.transform.SetParent(_countdownText.transform, false);
+                var rectangle = gantryObject.GetComponent<RectTransform>();
+                rectangle.anchorMin = rectangle.anchorMax = rectangle.pivot = new Vector2(0.5f, 0.5f);
+                rectangle.sizeDelta = new Vector2(360f, 96f);
+                _startGantry = gantryObject.GetComponent<StartGantryView>();
+                _startGantry.raycastTarget = false;
+            }
+            _countdownText.text = string.Empty;
+            _countdownText.enabled = false;
+            _startGantry.Render(sequence.State, sequence.LitLampCount);
+        }
+
+        public void ShowDelta(float? deltaSeconds)
+        {
+            _deltaSecondsRemaining = deltaSeconds.HasValue ? DeltaDisplaySeconds : 0f;
+            if (_deltaText == null)
+                return;
+            _deltaText.enabled = deltaSeconds.HasValue;
+            _deltaText.text = deltaSeconds.HasValue
+                ? (deltaSeconds.Value < 0f ? "-" : "+")
+                    + Mathf.Abs(deltaSeconds.Value).ToString("0.000", CultureInfo.InvariantCulture) : string.Empty;
+            if (deltaSeconds.HasValue)
+                _deltaText.color = deltaSeconds.Value < 0f ? Color.green
+                    : deltaSeconds.Value > 0f ? Color.red : Color.white;
+        }
+
+        public void Tick(float deltaTime)
+        {
+            if (_deltaText == null || _deltaSecondsRemaining <= 0f)
+                return;
+            _deltaSecondsRemaining = Mathf.Max(0f, _deltaSecondsRemaining - deltaTime);
+            Color color = _deltaText.color;
+            color.a = Mathf.Clamp01(_deltaSecondsRemaining / DeltaFadeSeconds);
+            _deltaText.color = color;
+            if (_deltaSecondsRemaining == 0f)
+                ShowDelta(null);
         }
 
         public void Render(RaceSession session, BestLapData bestLap, bool saveFailed)
@@ -31,9 +87,9 @@ namespace Ghostline.Game
                 _statusText.text = saveFailed ? "Lap complete; save failed (see Console) | R: restart"
                     : "Lap complete | R: restart";
             else
-                _statusText.text = session.Checkpoints.NextCheckpointIndex == 4
+                _statusText.text = session.Checkpoints.NextCheckpointIndex == session.Checkpoints.CheckpointCount
                     ? "All checkpoints passed. Cross the white finish line."
-                    : $"Next checkpoint: {session.Checkpoints.NextCheckpointIndex + 1} / 4";
+                    : $"Next checkpoint: {session.Checkpoints.NextCheckpointIndex + 1} / {session.Checkpoints.CheckpointCount}";
         }
     }
 }
