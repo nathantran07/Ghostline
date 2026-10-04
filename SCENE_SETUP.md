@@ -1,13 +1,17 @@
 # Ghostline scene setup
 
-## Build the scene
+## Open the supplied scene
+
+The project uses Unity **6000.6.4f1** and the **Universal 2D template**. Run `git lfs install` before cloning and `git lfs pull` after cloning to retrieve sprite and image assets. Open **Assets/Scenes/Main.unity**, press Play, and click the Game view for keyboard focus. Wait for lights out, then cross the start line to begin the lap clock. The supplied scene and TMP Essential Resources are ready to use; rebuilding is optional.
+
+## Rebuild the scene (optional)
 
 1. Open the project in Unity **6000.6.4f1**. Wait for package resolution and compilation. `Packages/manifest.json` includes **Unity Splines 2.8.4**.
 2. If TMP resources are missing, use **Window > TextMeshPro > Import TMP Essential Resources**. The builder validates the font before replacing the scene.
 3. Stop Play mode and choose **Tools > Ghostline > Build Scene**. Confirm replacement of `Assets/Scenes/Main.unity`. Save personal scene edits elsewhere before rebuilding.
 4. Open **Main** and press Play. The player starts behind the upper-right start/finish line, heading down-right into corner 1. Click the Game view for keyboard input.
 
-The track has a generated racing visual layer: alternating mowed grass bands, charcoal asphalt, white edge paint, inside-corner red/white curbs, metal barriers, outside-corner tire walls, outlined grid slots, sector paint, and a two-row checkered finish strip. These meshes add no colliders or race rules. The README preview screenshot predates this track and the Lambo change.
+The track has a generated racing visual layer: alternating mowed grass ribbons following the track, charcoal asphalt, white edge paint, inside-corner red/white curbs, metal barriers, outside-corner tire walls, outlined grid slots, sector paint, and a two-row checkered finish strip. These meshes add no colliders or race rules. The README hero is an isolated render of the game scene with a posed player and an in-memory ghost fixture.
 
 ## Add the minimap to your existing scene
 
@@ -31,9 +35,17 @@ Keep Padding below half the texture resolution and large enough for half the tic
 
 With a valid saved ghost, its dot appears at the configured spawn during the **start gantry and lights-out signal** and the approach to the start line, then follows playback after the first forward crossing. It hides when the recording ends or the attempt finishes, and returns to spawn after **R**. No recording means no ghost dot. The world ghost still remains hidden before the lap starts. The panel uses Unity's default UI material and built-in dot sprite; its only new texture is runtime-generated. No minimap shaders or material assets need assignment. Fresh **Build Scene** runs include the minimap automatically.
 
-Run **Window > General > Test Runner > EditMode** and select **MinimapViewTests** / **MinimapInstallerTests**, or **Run All**. The 14 new scene cases need no scene installation, saved ghost, batch mode, TMP-resource import, or extra test assembly setup. They clean up their own objects and preview scene. The 23 projection cases live in **MinimapProjectionTests** under the engine-free Core test assembly.
+Run **Window > General > Test Runner > EditMode** and select **MinimapViewTests** / **MinimapInstallerTests**, or **Run All**. The 14 minimap scene cases need no scene installation, saved ghost, batch mode, TMP-resource import, or extra test assembly setup. They clean up their own objects and preview scene. The 23 projection cases live in **MinimapProjectionTests** under the engine-free Core test assembly.
 
 Manual Play review: check that the line/tick match the track orientation, both dots align with the centerline, the player outline stays legible, and the larger top-right panel avoids your HUD edits. Resize the Game view to check scaling. Check no-ghost, countdown spawn, running playback, playback end, finish, and **R** restart. Automated checks do not replace this visual review.
+
+## Synthesized player audio
+
+The supplied scene includes synthesized Aventador-inspired V12 engine audio and procedural collision, countdown, and lap cues. All audio is generated in code; no recorded audio is included. **M** toggles mute while retaining configured volume levels. The ghost has no audio.
+
+For a scene missing audio, stop Play and use **Tools > Ghostline > Add Audio To Scene**. The additive installer supports Undo, reuses existing player components, preserves custom audio settings, and marks the scene dirty without saving. Fresh **Build Scene** runs include audio. Keep exactly one AudioListener on the main camera.
+
+Player audio settings live on **PlayerAudioSettings**, **PlayerAudioOutput**, **EngineAudio**, and **SfxPlayer**. The default engine uses the pulse voice; **Use Additive Voice** on EngineAudio provides a live A/B comparison with the previous harmonic voice. Other voice settings are captured on enable, so re-enable the component or restart Play after changing them.
 
 ## Track geometry and tuning
 
@@ -86,11 +98,11 @@ Grass uses the wall geometry helpers on separate offsets: inner-corner clamping,
 
 Run **TrackVisualGeometryTests** in EditMode for arc-length colors, normal alignment, depth limits, folded/overlapping strips, crossover clearance, independent toggles, and unchanged decor geometry. The decor visibility test renders every decor mesh alone and with grass and compares its visible pixels. Batch tests export **Logs/GrassStartFinishPreview.png**, **Logs/GrassTightCornerPreview.png**, and **Logs/GrassCrossoverPreview.png** for visual review.
 
-### Trackside decor checkpoint (commit 2)
+### Generated trackside decor
 
 Stop Play, open your existing Main, and run **Tools > Ghostline > Add Theme To Scene**. The installer attaches **DecorGenerator** to **Ghostline/Track** and builds decor from the available generated road and walls. Its four mesh objects appear under **Track > Generated**. Repeating the menu reuses the same component, preserves its settings and enabled state, and creates no duplicate roots. Installation is one Undo operation; Redo restores the component and visible geometry. The installer marks the scene dirty and never saves it, replaces authored objects, or regenerates physics. Save Main yourself after visual review to retain the component/settings. An inactive or unbuilt track is attached without enabling it; decor builds once the track geometry is available.
 
-Fresh **Tools > Ghostline > Build Scene** includes decor. For your edited Main, use **Add Theme To Scene**. `TrackGenerator.RebuildMeshes()` rebuilds enabled decor automatically after road/wall visuals, and track disable/re-enable releases/recreates its meshes. Use **Rebuild Decor** after changing decor Inspector fields. Generated meshes remain transient and regenerate on scene reload. An unrelated authored object named **Track/Generated** causes a clear error without replacement; rename that object before installing. The Ferris wheel remains deferred pending visual review.
+Fresh **Tools > Ghostline > Build Scene** includes decor. For your edited Main, use **Add Theme To Scene**. `TrackGenerator.RebuildMeshes()` rebuilds enabled decor automatically after road/wall visuals, and track disable/re-enable releases/recreates its meshes. Use **Rebuild Decor** after changing decor Inspector fields. Generated meshes remain transient and regenerate on scene reload. An unrelated authored object named **Track/Generated** causes a clear error without replacement; rename that object before installing.
 
 Tune **Tree Density**, **Blossom Fraction**, **Placement Margin**, **Banner Spacing**, and the palettes first. Then try **Seed** for a different grove arrangement or **Grandstand Size** for roof proportions. All dimensions are in track-local units. Every category has an independent Show toggle, density, and opaque palette. A visibility toggle keeps that category's footprints reserved, preserving all other layouts; density/dimension changes can change reservations. Zero density removes a category's reservations.
 
@@ -113,7 +125,7 @@ Tune **Tree Density**, **Blossom Fraction**, **Placement Margin**, **Banner Spac
 
 Settings fail explicitly on nonfinite/invalid values, altered palette sizes, translucent colors, or more than 4096 candidates/reserved footprints. Track regeneration validates enabled decor before replacing the circuit, so invalid decor settings preserve existing walls and gates. Densities range from 0–4, margin from 0–50, and dimensions/spacing/thresholds must be positive and at most 100. Grandstands must be at least 0.8 by 0.8 units to contain the crowd dots and stay within 50 units (or 10% of a shorter circuit) beyond the finish. Crowded placements can exhaust their bounded attempts and be omitted; the default circuit must still produce every category.
 
-Run **DecorGeneratorTests**, **ThemeInstallerTests**, or the full EditMode suite with graphics enabled. Tests check exhaustive triangle and wall-end clearance, pairwise decor clearance, containment of every generated vertex, nonempty defaults, identical seed regeneration, visibility-toggle stability, invalid inputs, empty densities, mesh cleanup and unchanged physics/gates/spawn. Installer tests cover repeated installation, Undo/Redo, preserved settings and disabled states, inactive/unbuilt tracks, invalid targets, automatic track-triggered rebuilds, and fresh-scene reload. Regressions verify invalid decor settings leave the circuit intact and same-frame Play rebuilds/toggles/regeneration use current geometry despite deferred destruction. The integration fixtures use disposable preview copies; the fresh-scene builder and Play regression run only in batch mode. Render tests exercise the installer and export `Logs/DecorStartPreview.png` and `Logs/DecorCornerPreview.png`; wiring-review copies are saved under ignored `Logs/ThemeWiring/`. These renders support the checkpoint; your visual review remains open.
+Run **DecorGeneratorTests**, **ThemeInstallerTests**, or the full EditMode suite with graphics enabled. Tests check exhaustive triangle and wall-end clearance, pairwise decor clearance, containment of every generated vertex, nonempty defaults, identical seed regeneration, visibility-toggle stability, invalid inputs, empty densities, mesh cleanup and unchanged physics/gates/spawn. Installer tests cover repeated installation, Undo/Redo, preserved settings and disabled states, inactive/unbuilt tracks, invalid targets, automatic track-triggered rebuilds, and fresh-scene reload. Regressions verify invalid decor settings leave the circuit intact and same-frame Play rebuilds/toggles/regeneration use current geometry despite deferred destruction. The integration fixtures use disposable preview copies; the fresh-scene builder and Play regression run only in batch mode. Render tests exercise the installer and export `Logs/DecorStartPreview.png` and `Logs/DecorCornerPreview.png`; wiring-review copies are saved under ignored `Logs/ThemeWiring/`. Inspect these renders alongside a manual Play review of your scene.
 
 The crossover is a flat intersection. Both spline passes continue straight. Wall samples inside another road corridor are omitted when their separation along the loop exceeds three road widths. Each omission splits the wall into open polylines; collider ends cannot bridge the intersection.
 
