@@ -63,6 +63,34 @@ namespace Ghostline.Tests.Scene
         }
 
         [Test]
+        public void PulseVoiceIsDefaultAndAdditiveComparisonIsAvailable()
+        {
+            using (var rig = new Rig())
+            {
+                var serialized = new UnityEditor.SerializedObject(rig.Engine);
+                var additive = serialized.FindProperty("_useAdditiveVoice");
+                Assert.That(additive, Is.Not.Null, "A/B comparison must have a serialized player toggle.");
+                Assert.That(additive.boolValue, Is.False);
+                var defaults = new PulseEngineSettings();
+                Assert.That(serialized.FindProperty("_pulseWidth").floatValue, Is.EqualTo(defaults.PulseWidth));
+                Assert.That(serialized.FindProperty("_bankTimingOffset").floatValue, Is.EqualTo(defaults.BankTimingOffset));
+                Assert.That(serialized.FindProperty("_amplitudeJitter").floatValue, Is.EqualTo(defaults.AmplitudeJitter));
+                Assert.That(serialized.FindProperty("_timingJitter").floatValue, Is.EqualTo(defaults.TimingJitter));
+                Assert.That(unchecked((uint)serialized.FindProperty("_randomSeed").intValue), Is.EqualTo(defaults.Seed));
+                var resonances = serialized.FindProperty("_resonances");
+                Assert.That(resonances.arraySize, Is.EqualTo(3));
+                for (int i = 0; i < 3; i++)
+                {
+                    var resonance = resonances.GetArrayElementAtIndex(i);
+                    PulseResonance expected = defaults.ResonanceAt(i);
+                    Assert.That(resonance.FindPropertyRelative("_frequency").floatValue, Is.EqualTo(expected.Frequency));
+                    Assert.That(resonance.FindPropertyRelative("_q").floatValue, Is.EqualTo(expected.Q));
+                    Assert.That(resonance.FindPropertyRelative("_gain").floatValue, Is.EqualTo(expected.Gain));
+                }
+            }
+        }
+
+        [Test]
         public void CountdownPublishesEachPlayerCueOnceAndRestartBeginsAtThree()
         {
             using (var rig = new Rig())
@@ -181,6 +209,33 @@ namespace Ghostline.Tests.Scene
                 Assert.That(Array.Exists(samples, sample => Math.Abs(sample) > 0.0001f), Is.True);
                 rig.Race.Restart();
                 Assert.That(rig.Sfx.Source.isPlaying, Is.True);
+            }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
+        public IEnumerator LiveABSwitchReachesAudioThreadWithoutRestartingCarrier()
+        {
+            yield return new EnterPlayMode();
+            using (var listeners = new OtherListeners())
+            using (var rig = new Rig())
+            {
+                yield return new WaitForSecondsRealtime(0.2f);
+                AudioClip carrier = rig.EngineSource.clip;
+                var synth = Get<PulseEngineSynthesizer>(rig.Engine, "_synthesizer");
+                Assert.That(Get<double>(synth, "_blend"), Is.Zero);
+                int buffers = rig.Engine.RenderedBufferCount;
+                Set(rig.Engine, "_useAdditiveVoice", true);
+                yield return new WaitForSecondsRealtime(0.25f);
+                Assert.That(Get<double>(synth, "_blend"), Is.GreaterThan(0.99d));
+                Assert.That(rig.Engine.RenderedBufferCount, Is.GreaterThan(buffers));
+                Assert.That(rig.EngineSource.isPlaying, Is.True);
+                Assert.That(rig.EngineSource.clip, Is.SameAs(carrier));
+                Set(rig.Engine, "_useAdditiveVoice", false);
+                yield return new WaitForSecondsRealtime(0.25f);
+                Assert.That(Get<double>(synth, "_blend"), Is.LessThan(0.01d));
+                Assert.That(rig.EngineSource.clip, Is.SameAs(carrier));
+                Assert.That(rig.Ghost.GetComponentsInChildren<AudioSource>(true), Is.Empty);
             }
             yield return new ExitPlayMode();
         }

@@ -81,6 +81,13 @@ namespace Ghostline.Tests.Scene
             serialized.FindProperty("_pitchScale").floatValue = 0.8f;
             serialized.FindProperty("_crankWeight").floatValue = 0.6f;
             serialized.FindProperty("_lowPassMax").floatValue = 4000f;
+            serialized.FindProperty("_useAdditiveVoice").boolValue = true;
+            serialized.FindProperty("_pulseWidth").floatValue = 0.003f;
+            serialized.FindProperty("_randomSeed").intValue = 42;
+            var resonance = serialized.FindProperty("_resonances").GetArrayElementAtIndex(0);
+            resonance.FindPropertyRelative("_frequency").floatValue = 250f;
+            resonance.FindPropertyRelative("_q").floatValue = 2f;
+            resonance.FindPropertyRelative("_gain").floatValue = 0.4f;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             var volumes = new SerializedObject(settings);
             volumes.FindProperty("_engineVolume").floatValue = 0.2f;
@@ -309,6 +316,12 @@ namespace Ghostline.Tests.Scene
                 CarController car = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<CarController>(true)).Single();
                 Assert.That(car.GetComponent<SfxPlayer>().Source.transform.parent, Is.SameAs(car.transform));
                 Assert.That(car.GetComponent<PlayerAudioSettings>().MasterVolume, Is.EqualTo(0.5f));
+                var voice = new SerializedObject(car.GetComponent<EngineAudio>());
+                Assert.That(voice.FindProperty("_useAdditiveVoice").boolValue, Is.False);
+                Assert.That(voice.FindProperty("_pulseWidth").floatValue, Is.EqualTo(0.0012f));
+                Assert.That(voice.FindProperty("_resonances").arraySize, Is.EqualTo(3));
+                Assert.That(voice.FindProperty("_resonances").GetArrayElementAtIndex(0)
+                    .FindPropertyRelative("_frequency").floatValue, Is.EqualTo(180f));
             }
             finally
             {

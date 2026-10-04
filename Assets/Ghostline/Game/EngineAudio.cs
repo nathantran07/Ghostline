@@ -22,7 +22,19 @@ namespace Ghostline.Game
         [SerializeField] private bool _revLimiter;
         [SerializeField, Min(0f)] private float _limiterDepth = 180f;
         [SerializeField, Min(0.1f)] private float _limiterFrequency = 18f;
-        [Header("Engine timbre")]
+        [Header("Pulse voice")]
+        [Tooltip("Live A/B switch: compare the previous additive voice with the new pulse voice.")]
+        [SerializeField] private bool _useAdditiveVoice;
+        [Tooltip("Approximate burst duration in seconds, to 99% decay.")]
+        [SerializeField, Range(0.0001f, 0.02f)] private float _pulseWidth = 0.0012f;
+        [Tooltip("Opposing bank timing offsets as a fraction of one firing interval.")]
+        [SerializeField, Range(0f, 0.1f)] private float _bankTimingOffset = 0.01f;
+        [SerializeField, Range(0f, 0.2f)] private float _amplitudeJitter = 0.03f;
+        [SerializeField, Range(0f, 0.1f)] private float _timingJitter = 0.02f;
+        [SerializeField] private int _randomSeed = 0x12345678;
+        [SerializeField] private Resonance[] _resonances = { new Resonance(180f, 1.2f, 0.5f),
+            new Resonance(650f, 1.5f, 0.3f), new Resonance(1800f, 1f, 0.2f) };
+        [Header("Additive comparison timbre")]
         [Tooltip("Weights for orders 1 through 12 of rpm / 60 * 6 Hz.")]
         [SerializeField] private float[] _harmonicWeights = EngineVoiceSettings.CreateDefaultHarmonics();
         [Tooltip("Crank orders are relative to rpm / 60 Hz, below the V12 firing fundamental.")]
@@ -30,11 +42,13 @@ namespace Ghostline.Game
         [SerializeField, Range(0f, 1f)] private float _halfOrderWeight = 0.15f;
         [SerializeField, Range(0f, 1f)] private float _secondCrankWeight = 0.45f;
         [SerializeField, Range(0f, 1f)] private float _thirdCrankWeight = 0.35f;
-        [Tooltip("Scales every oscillator frequency; the RPM model and filter tracking are unchanged.")]
+        [Header("Shared voice controls")]
+        [Tooltip("Scales the synthesized frequency in either voice; RPM and filter tracking stay unchanged.")]
         [SerializeField, Min(0.01f)] private float _pitchScale = 1f;
         [Tooltip("Harmonic low-pass cutoff at idle and redline, in Hz. Applied before intake/exhaust noise.")]
         [SerializeField, Min(1f)] private float _lowPassMin = 1500f;
         [SerializeField, Min(1f)] private float _lowPassMax = 5000f;
+        [Tooltip("Pulse: slow, bounded bank timing drift. Additive: detuned oscillator banks.")]
         [SerializeField, Range(0f, 0.02f)] private float _bankDetune = 0.003f;
         [SerializeField, Range(0f, 1f)] private float _intakeExhaustNoise = 0.06f;
         [SerializeField, Min(0.001f)] private float _audioRampTime = 0.02f;
@@ -47,11 +61,28 @@ namespace Ghostline.Game
         private AudioSource _source;
         private AudioClip _carrier;
         private EngineSoundModel _model;
-        private EngineSynthesizer _synthesizer;
+        private PulseEngineSynthesizer _synthesizer;
         private Targets _targets;
         private bool _warnedNotPlaying;
         private int _renderedBuffers;
         public int RenderedBufferCount => Volatile.Read(ref _renderedBuffers);
+
+        [Serializable]
+        private sealed class Resonance
+        {
+            [SerializeField, Min(1f)] private float _frequency;
+            [SerializeField, Range(0.2f, 20f)] private float _q;
+            [SerializeField, Range(0f, 1f)] private float _gain;
+
+            internal Resonance(float frequency, float q, float gain)
+            {
+                _frequency = frequency;
+                _q = q;
+                _gain = gain;
+            }
+
+            internal PulseResonance ToCore() => new PulseResonance(_frequency, _q, _gain);
+        }
 
         /// <summary>Installer migration: preserves every custom harmonic preset and other tuning field.</summary>
         public void UpgradeFactoryHarmonics()
@@ -63,14 +94,16 @@ namespace Ghostline.Game
         // This immutable managed object contains no Unity references. The renderer is audio-thread-owned.
         private sealed class Targets
         {
-            internal readonly EngineSynthesizer Synthesizer;
+            internal readonly PulseEngineSynthesizer Synthesizer;
             internal readonly float Frequency;
             internal readonly float Loudness;
             internal readonly float Throttle;
             internal readonly float Volume;
             internal readonly float Tire;
+            internal readonly bool UseAdditive;
 
-            internal Targets(EngineSynthesizer synthesizer, EngineSoundFrame frame, float volume, float tire)
+            internal Targets(PulseEngineSynthesizer synthesizer, EngineSoundFrame frame, float volume,
+                float tire, bool useAdditive)
             {
                 Synthesizer = synthesizer;
                 Frequency = AudioMath.FiringFrequency(frame.Rpm);
@@ -78,6 +111,7 @@ namespace Ghostline.Game
                 Throttle = frame.EffectiveThrottle;
                 Volume = volume;
                 Tire = tire;
+                UseAdditive = useAdditive;
             }
         }
 
@@ -153,7 +187,7 @@ namespace Ghostline.Game
                 _car.TopSpeedReference, Time.deltaTime);
             float tire = _tireSqueal ? Mathf.Clamp01(Mathf.Abs(Vector2.Dot(_car.Body.linearVelocity,
                 transform.right)) / Mathf.Max(0.1f, _tireReferenceSpeed)) * Mathf.Clamp01(_tireVolume) : 0f;
-            Volatile.Write(ref _targets, new Targets(_synthesizer, frame, _settings.EngineVolume, tire));
+            Volatile.Write(ref _targets, new Targets(_synthesizer, frame, _settings.EngineVolume, tire, _useAdditiveVoice));
             if (!_warnedNotPlaying && _source != null && !_source.isPlaying && !AudioListener.pause)
             {
                 _warnedNotPlaying = true;
@@ -165,7 +199,8 @@ namespace Ghostline.Game
         {
             _model?.Reset();
             if (_model != null && _synthesizer != null)
-                Volatile.Write(ref _targets, new Targets(_synthesizer, _model.Current, _settings.EngineVolume, 0f));
+                Volatile.Write(ref _targets, new Targets(_synthesizer, _model.Current,
+                    _settings.EngineVolume, 0f, _useAdditiveVoice));
         }
 
         private void AudioConfigurationChanged(bool deviceWasChanged)
@@ -175,8 +210,21 @@ namespace Ghostline.Game
                 rate = 48000;
             var voice = new EngineVoiceSettings(_crankWeight, _halfOrderWeight, _secondCrankWeight,
                 _thirdCrankWeight, _pitchScale, _lowPassMin, _lowPassMax, _idleRpm, _redlineRpm);
-            _synthesizer = new EngineSynthesizer(rate, _harmonicWeights, _bankDetune,
+            var additive = new EngineSynthesizer(rate, _harmonicWeights, _bankDetune,
                 _intakeExhaustNoise, _audioRampTime, voice);
+            if (_resonances == null || _resonances.Length != 3)
+                throw new ArgumentException("Supply exactly three pulse resonances.", nameof(_resonances));
+            var resonances = new PulseResonance[3];
+            for (int i = 0; i < resonances.Length; i++)
+            {
+                if (_resonances[i] == null)
+                    throw new ArgumentException("Pulse resonances cannot be null.", nameof(_resonances));
+                resonances[i] = _resonances[i].ToCore();
+            }
+            var pulses = new PulseEngineSettings(_pulseWidth, _bankTimingOffset, _bankDetune,
+                _amplitudeJitter, _timingJitter, unchecked((uint)_randomSeed), resonances);
+            _synthesizer = new PulseEngineSynthesizer(rate, pulses, voice, additive,
+                _intakeExhaustNoise, _audioRampTime);
             ResetEngine();
             _source.Stop();
             ReleaseCarrier();
@@ -210,7 +258,7 @@ namespace Ghostline.Game
                 Array.Clear(data, 0, data.Length);
             else
                 targets.Synthesizer.Render(data, channels, targets.Frequency, targets.Loudness,
-                    targets.Throttle, targets.Volume, targets.Tire);
+                    targets.Throttle, targets.Volume, targets.Tire, targets.UseAdditive);
             Interlocked.Increment(ref _renderedBuffers);
         }
     }
