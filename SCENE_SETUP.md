@@ -81,7 +81,34 @@ Sorting orders: grass **-7**; barriers/tire walls **-6**; road **-5**; edge line
 
 For the grass/road-paint visual checkpoint, keep your existing Main scene open, select **Ghostline/Track > TrackVisuals**, and enter Play. Adjust the two grass colors, Grass Stripe Width, and category toggles outside Play, then restart Play to rebuild only the transient visuals with unchanged track settings. Do not use **Build Scene** on your edited scene. No installer or scene rebuild is needed for this checkpoint. Stripe width must be finite and positive; settings requiring more than 4096 grass bands fail explicitly. The first and last bands are clipped to the existing ground bounds, with no gaps or extra renderers.
 
-Run **TrackVisualGeometryTests** in EditMode to check stripe continuity/colors, independent toggles, invalid widths, kerb side/curvature/stripe selection, crossover clearance, sorting, and collider/gate preservation. Inspect the start and corner previews and drive a lap to review stripe contrast and paint visibility. This first theme commit stops for visual review; blossom trees, grandstands, circular tire stacks, striped banner blocks, Ferris wheel, and additive installer are planned for later commits. The minimap remains an ordinary UI overlay; there is no decor exclusion or text rendering.
+Run **TrackVisualGeometryTests** in EditMode to check stripe continuity/colors, independent toggles, invalid widths, kerb side/curvature/stripe selection, crossover clearance, sorting, and collider/gate preservation. Inspect the start and corner previews and drive a lap to review stripe contrast and paint visibility. The minimap remains an ordinary UI overlay; there is no decor exclusion or text rendering.
+
+### Trackside decor checkpoint (commit 2)
+
+Enter Play, select **Ghostline/Track**, and **Add Component > DecorGenerator**. This builds temporary geometry without saving or replacing Main. Use the component's **Rebuild Decor** context menu after changing its Inspector settings, or after explicitly regenerating the track. Stop Play to discard this review-only component. There is no automatic installer in this commit; the Ferris wheel and installer await visual approval.
+
+Tune **Tree Density**, **Blossom Fraction**, **Placement Margin**, **Banner Spacing**, and the palettes first. Then try **Seed** for a different grove arrangement or **Grandstand Size** for roof proportions. All dimensions are in track-local units. Every category has an independent Show toggle, density, and opaque palette. A visibility toggle keeps that category's footprints reserved, preserving all other layouts; density/dimension changes can change reservations. Zero density removes a category's reservations.
+
+| Inspector field | Default | Effect |
+|---|---|---|
+| Seed / Placement Margin / Max Placement Attempts | 271828 / 0.8 / 32 | Deterministic category streams; clearance around whole footprints; 1–128 attempts per placement |
+| Show Trees / Tree Density | true / 1 | Target 0.3 canopy clusters per unit of track length |
+| Grove Spacing / Tree Falloff / Tree Reach | 18 / 5 / 16 | Spaced groves, exponential falloff away from the wall, maximum extra scatter distance |
+| Blossom Fraction | 0.18 | Mostly dark green clusters, with pink accents |
+| Tree Palette | 7 entries | Dark greens `#1F5A2B`, `#2A6B33`; blossoms `#F8BBD0`, `#F48FB1`; green/pink highlights; darker offset shadow |
+| Show Grandstands / Grandstand Density / Grandstand Size | true / 1 / (12, 3.4) | Up to two stands per density unit on the main straight just beyond the finish; crowd rows face the track |
+| Grandstand Palette | 6 entries | Gray roof, seating base, four crowd colors |
+| Show Tires / Tire Density / Exit Curvature Threshold | true / 1 / 0.06 | Select exits after qualifying curved runs; place stacks on the outer side |
+| Tire Palette | 4 entries | Rubber `#212121`, lighter inner ring, red pad, white pad |
+| Show Banners / Banner Density / Banner Spacing | true / 1 / 10 | Even arc-length anchors on straight sections; effective spacing is spacing divided by density |
+| Straight Curvature Limit | 0.025 | Whole-length straightness check for stands and banners |
+| Banner Palette | 4 entries | Invented red/blue/yellow/purple blocks and stripes, no glyphs or logos |
+
+`DecorPlacementGeometry` indexes the generated road and wall triangles and actual wall-collider capsules, including their rounded ends. It checks the entire oriented footprint against every nearby segment, including the other crossover pass and narrowed corners, then against every reserved decor footprint. `DecorMeshBuilder` uses 3–6 overlapping circles per canopy, plus one highlight and an offset shadow. Each category is one static mesh/submesh using the existing road material, solid vertex fills with Linear-color conversion, and 32-bit indices. All decor sorts at **1**, below walls **3**, ghost **4** and car **5**. There are no colliders, frame callbacks, custom shaders, or material assets.
+
+Settings fail explicitly on nonfinite/invalid values, altered palette sizes, translucent colors, or more than 4096 candidates/reserved footprints. Densities range from 0–4, margin from 0–50, and dimensions/spacing/thresholds must be positive and at most 100. Grandstands must be at least 0.8 by 0.8 units to contain the crowd dots and stay within 50 units (or 10% of a shorter circuit) beyond the finish. Crowded placements can exhaust their bounded attempts and be omitted; the default circuit must still produce every category.
+
+Run **DecorGeneratorTests** or the full EditMode suite with graphics enabled. Tests check exhaustive triangle and wall-end clearance, pairwise decor clearance, containment of every generated vertex, nonempty defaults, identical seed regeneration, visibility-toggle stability, invalid inputs, empty densities, mesh cleanup and unchanged physics/gates/spawn. Render tests export `Logs/DecorStartPreview.png` and `Logs/DecorCornerPreview.png`; the commit 2 review copies are saved under ignored `Logs/ThemeCommit2/`. These renders support the checkpoint; your visual review remains open.
 
 The crossover is a flat intersection. Both spline passes continue straight. Wall samples inside another road corridor are omitted when their separation along the loop exceeds three road widths. Each omission splits the wall into open polylines; collider ends cannot bridge the intersection.
 
