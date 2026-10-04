@@ -26,6 +26,10 @@ namespace Ghostline.Game
         private readonly StartSequence _startSequence = new StartSequence();
 
         public int CheckpointCount => _session == null ? _checkpointCount : _session.Checkpoints.CheckpointCount;
+        public CarController PlayerCar => _car;
+        public event Action<int> CountdownCue;
+        public event Action<bool> LapCompleted;
+        public event Action Restarted;
 
         public bool ShowGhostOnMinimap => _session != null && _ghost != null && _ghost.isActiveAndEnabled
             && _ghost.HasRecording && (_session.Timer.State == LapTimerState.NotStarted
@@ -97,11 +101,14 @@ namespace Ghostline.Game
         {
             if (_session == null)
                 return;
+            string previousCountdown = _startSequence.Label;
             _startSequence.Tick(Time.fixedDeltaTime);
             _car.InputEnabled = _startSequence.DrivingAllowed;
             _hud.Tick(Time.fixedDeltaTime);
             _hud.RenderCountdown(_startSequence);
             _session.Tick(Time.fixedDeltaTime, _car.Body.position.x, _car.Body.position.y, _car.Body.rotation);
+            if (_startSequence.Label != previousCountdown)
+                EmitCountdownCue();
         }
 
         public void CrossTrigger(CarController car, bool isStartFinish, int checkpointIndex)
@@ -124,10 +131,14 @@ namespace Ghostline.Game
             }
             car.CanDrive = false;
             _hud.ShowDelta(DeltaCalculator.AtFinish(_bestLap, _session.CompletedLap.LapTime));
+            bool newBest = false;
             try
             {
                 if (_repository.TrySave(_session.CompletedLap))
+                {
                     _bestLap = _session.CompletedLap;
+                    newBest = true;
+                }
             }
             catch (Exception exception) when (exception is IOException
                 || exception is UnauthorizedAccessException || exception is SecurityException)
@@ -135,6 +146,7 @@ namespace Ghostline.Game
                 _saveFailed = true;
                 Debug.LogWarning($"Ghostline could not save its best lap: {exception.Message}", this);
             }
+            LapCompleted?.Invoke(newBest);
         }
 
         public void Restart()
@@ -152,6 +164,17 @@ namespace Ghostline.Game
             _hud.Render(_session, _bestLap, _saveFailed);
             _hud.RenderCountdown(_startSequence);
             _hud.ShowDelta(null);
+            Restarted?.Invoke();
+            EmitCountdownCue();
+        }
+
+        private void EmitCountdownCue()
+        {
+            string label = _startSequence.Label;
+            if (label == "3" || label == "2" || label == "1")
+                CountdownCue?.Invoke(label[0] - '0');
+            else if (label == "GO")
+                CountdownCue?.Invoke(0);
         }
     }
 }

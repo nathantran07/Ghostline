@@ -1,3 +1,4 @@
+using System;
 using Ghostline.Core;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -50,6 +51,8 @@ namespace Ghostline.Game
         public bool CanDrive { get; set; } = true;
         public bool InputEnabled { get; set; } = true;
         public float SmoothedThrottle => _smoothedThrottle;
+        public float TopSpeedReference => _topSpeed;
+        public event Action<float> WallImpacted;
 
         private void Awake()
         {
@@ -135,6 +138,7 @@ namespace Ghostline.Game
             if (direction.sqrMagnitude < 0.5f && collision.contactCount > 0)
                 direction = Vector2.Reflect(_incomingVelocity, collision.GetContact(0).normal).normalized;
             _body.linearVelocity = direction * retained;
+            WallImpacted?.Invoke(_incomingVelocity.magnitude);
         }
 
         public void ResetPose(Vector2 position, float rotation)
