@@ -209,6 +209,7 @@ namespace Ghostline.Editor
             generator.Generate(race);
             cameraFollow.SnapToTarget();
             GhostlineMinimapInstaller.AddToScene(scene);
+            GhostlineAudioInstaller.AddToScene(scene);
 
             if (!AssetDatabase.IsValidFolder("Assets/Scenes"))
                 AssetDatabase.CreateFolder("Assets", "Scenes");
