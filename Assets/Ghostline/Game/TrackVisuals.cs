@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Ghostline.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Splines;
@@ -12,9 +13,11 @@ namespace Ghostline.Game
     {
         [Header("Ground")]
         [SerializeField] private bool _showGrass = true;
-        [SerializeField] private Color _grassColor = new Color(0.035f, 0.095f, 0.05f);
-        [SerializeField] private Color _grassStripeColor = new Color(0.055f, 0.14f, 0.07f);
-        [SerializeField, Min(0.1f)] private float _grassStripeWidth = 8f;
+        [SerializeField] private Color _grassBandColor = new Color(47f / 255f, 107f / 255f, 47f / 255f);
+        [SerializeField] private Color _grassAlternateColor = new Color(58f / 255f, 125f / 255f, 58f / 255f);
+        [SerializeField] private Color _grassBaseColor = new Color(40f / 255f, 92f / 255f, 42f / 255f);
+        [SerializeField, Min(0.1f)] private float _bandLength = 6f;
+        [SerializeField, Min(0f)] private float _grassDepth = 14f;
         [SerializeField, Min(0f)] private float _grassMargin = 18f;
         [SerializeField, Min(0.1f)] private float _screenHeight = 18f;
         [Header("Edge lines and curbs")]
@@ -117,6 +120,7 @@ namespace Ghostline.Game
                 renderer.shadowCastingMode = ShadowCastingMode.Off;
                 renderer.receiveShadows = false;
             }
+            _ribbonQuads.Clear();
             BuildGrass();
             BuildRibbons();
             PrepareGrid();
@@ -148,17 +152,19 @@ namespace Ghostline.Game
 
         private void ValidateSettings()
         {
-            float[] positive = { _screenHeight, _grassStripeWidth, _edgeWidth, _curbWidth, _curbCurvatureThreshold, _curbStripeLength,
+            float[] positive = { _screenHeight, _bandLength, _edgeWidth, _curbWidth, _curbCurvatureThreshold, _curbStripeLength,
                 _barrierWidth, _barrierCenterWidth, _tireWidth, _tireCurvatureThreshold, _tireBlockLength,
                 _checkerDepth, _gridSlotLength, _gridSlotWidth, _gridOutlineWidth, _gridRowSpacing,
                 _frontGridDistance, _gridCurvatureLimit, _sectorLineWidth };
             foreach (float value in positive)
                 if (float.IsNaN(value) || float.IsInfinity(value) || value <= 0f)
                     throw new InvalidOperationException("Track visual dimensions and thresholds must be finite and positive.");
-            float[] nonnegative = { _grassMargin, _edgeInset, _barrierGap, _curbMinimumRunLength, _tireMinimumRunLength, _gridStagger };
+            float[] nonnegative = { _grassDepth, _grassMargin, _edgeInset, _barrierGap, _curbMinimumRunLength, _tireMinimumRunLength, _gridStagger };
             foreach (float value in nonnegative)
                 if (float.IsNaN(value) || float.IsInfinity(value) || value < 0f)
                     throw new InvalidOperationException("Track visual margins and minimum run lengths must be finite and nonnegative.");
+            if (Mathf.Ceil(_track.Length / _bandLength) > 4096f)
+                throw new InvalidOperationException("Grass band length must produce at most 4096 bands around the lap.");
             if (_tireCurvatureThreshold <= _curbCurvatureThreshold || _barrierCenterWidth >= _barrierWidth
                 || _edgeInset + _edgeWidth + _curbWidth >= _track.RoadWidth * 0.5f
                 || _gridOutlineWidth * 2f >= Mathf.Min(_gridSlotWidth, _gridSlotLength) || _gridRowSpacing < 1f)
@@ -189,24 +195,212 @@ namespace Ghostline.Game
             if (camera != null && camera.orthographic)
                 height = Mathf.Max(height, camera.orthographicSize * 2f);
             float scale = Mathf.Min(Mathf.Abs(transform.lossyScale.x), Mathf.Abs(transform.lossyScale.y));
-            float margin = Mathf.Max(_grassMargin, height) / Mathf.Max(scale, 0.0001f)
+            float margin = Mathf.Max(_grassDepth, Mathf.Max(_grassMargin, height) / Mathf.Max(scale, 0.0001f))
                 + _track.RoadWidth * 0.5f + _track.WallThickness + _barrierGap + _barrierWidth + _tireWidth;
             minimum -= Vector2.one * margin;
             maximum += Vector2.one * margin;
-            float firstBand = Mathf.Floor(minimum.y / _grassStripeWidth);
-            float bandCount = Mathf.Ceil(maximum.y / _grassStripeWidth) - firstBand;
-            if (float.IsNaN(bandCount) || float.IsInfinity(bandCount) || bandCount < 1f || bandCount > 4096f)
-                throw new InvalidOperationException("Grass stripe width must produce between 1 and 4096 bands.");
-            for (int i = 0; i < (int)bandCount; i++)
+            // One draw, with the flat base behind ribbons and all existing decor.
+            mesh.AddQuad(minimum, new Vector2(maximum.x, minimum.y), maximum,
+                new Vector2(minimum.x, maximum.y), _grassBaseColor, 0.02f);
+            if (_grassDepth > 0f)
             {
-                float band = firstBand + i;
-                float bottom = Mathf.Max(minimum.y, band * _grassStripeWidth);
-                float top = Mathf.Min(maximum.y, (band + 1f) * _grassStripeWidth);
-                Color color = band % 2f == 0f ? _grassColor : _grassStripeColor;
-                mesh.AddQuad(new Vector2(minimum.x, bottom), new Vector2(maximum.x, bottom),
-                    new Vector2(maximum.x, top), new Vector2(minimum.x, top), color);
+                float[][] offsets = PrepareGrassOffsets();
+                var occupied = new Dictionary<(int X, int Y), List<Vector2[]>>();
+                for (int sideIndex = 0; sideIndex < 2; sideIndex++)
+                    for (int i = 0; i < _track.Samples.Count; i++)
+                    {
+                        float from = i * _track.SampleSpacing;
+                        float end = Mathf.Min((i + 1) * _track.SampleSpacing, _track.Length);
+                        while (from < end - 0.00001f)
+                        {
+                            int band = Mathf.FloorToInt((from + 0.00001f) / _bandLength);
+                            float to = Mathf.Min(end, (band + 1) * _bandLength);
+                            AddGrassQuad(mesh, occupied, offsets[sideIndex], sideIndex == 0 ? 1 : -1,
+                                from, to, band % 2 == 0 ? _grassBandColor : _grassAlternateColor);
+                            from = to;
+                        }
+                    }
             }
             Assign(0, mesh);
+        }
+
+        private float[][] PrepareGrassOffsets()
+        {
+            int count = _track.Samples.Count;
+            var offsets = new[] { new float[count], new float[count] };
+            var paths = new[] { new TrackPoint[count], new TrackPoint[count] };
+            var allowed = new[] { new bool[count], new bool[count] };
+            float slope = _track.RoadWidth * 0.5f / _track.OffsetSmoothingLength;
+            for (int side = 0; side < 2; side++)
+                for (int i = 0; i < count; i++)
+                {
+                    float requested = GrassInnerOffset(_track.Samples[i].Distance) + _grassDepth;
+                    float curvature = _track.GetSignedCurvature(i) * (side == 0 ? 1f : -1f);
+                    offsets[side][i] = TrackOffsetGeometry.ClampHalfWidth(requested,
+                        curvature > 0f ? 1f / curvature : float.PositiveInfinity, 0f, _track.RadiusMargin);
+                }
+            // Work on presentation profiles only; wall/road widths are never modified.
+            for (int attempt = 0; attempt < 32; attempt++)
+            {
+                for (int side = 0; side < 2; side++)
+                {
+                    TrackOffsetGeometry.SmoothClosed(offsets[side], _track.SampleSpacing, slope);
+                    for (int i = 0; i < count; i++)
+                    {
+                        TrackSample sample = _track.Samples[i];
+                        Vector2 point = sample.Position + sample.Normal * (offsets[side][i] * (side == 0 ? 1f : -1f));
+                        paths[side][i] = new TrackPoint(point.x, point.y);
+                        float to = sample.Distance + _track.SampleSpacing;
+                        allowed[side][i] = GrassSectionClear(offsets[side], side == 0 ? 1 : -1, sample.Distance)
+                            && GrassSectionClear(offsets[side], side == 0 ? 1 : -1, to)
+                            && GrassSectionClear(offsets[side], side == 0 ? 1 : -1, (sample.Distance + to) * 0.5f);
+                    }
+                }
+                List<TrackIntersection> intersections = TrackOffsetGeometry.FindIntersections(paths[0], allowed[0],
+                    paths[1], allowed[1], _track.RoadWidth);
+                if (intersections.Count == 0)
+                    return offsets;
+                foreach (float[] profile in offsets)
+                    TrackOffsetGeometry.ShrinkAtIntersections(profile, intersections, 0.8f);
+            }
+            throw new InvalidOperationException("No safe grass offset could be generated after 32 local width reductions.");
+        }
+
+        private float GrassInnerOffset(float distance)
+        {
+            return _track.GetRoadWidth(distance) * 0.5f + _track.WallThickness;
+        }
+
+        private bool GrassSectionClear(float[] offsets, int side, float distance)
+        {
+            TrackSample sample = _track.GetSample(distance);
+            float inner = GrassInnerOffset(distance);
+            float outer = Mathf.Min(inner + _grassDepth, TrackOffsetGeometry.InterpolateClosed(offsets, distance, _track.Length));
+            if (outer <= inner + 0.0001f)
+                return false;
+            return !_track.InsideOtherRoad(sample.Position + sample.Normal * (inner * side), sample.Distance)
+                && !_track.InsideOtherRoad(sample.Position + sample.Normal * (outer * side), sample.Distance)
+                && !_track.InsideOtherRoad(sample.Position + sample.Normal * ((inner + outer) * 0.5f * side), sample.Distance);
+        }
+
+        private void AddGrassQuad(ColoredMesh mesh, Dictionary<(int X, int Y), List<Vector2[]>> occupied,
+            float[] offsets, int side, float from, float to, Color color)
+        {
+            float middle = (from + to) * 0.5f;
+            if (!GrassSectionClear(offsets, side, from) || !GrassSectionClear(offsets, side, to)
+                || !GrassSectionClear(offsets, side, middle))
+                return;
+            TrackSample a = _track.GetSample(from);
+            TrackSample b = _track.GetSample(to);
+            float aInner = GrassInnerOffset(from);
+            float bInner = GrassInnerOffset(to);
+            float aOuter = Mathf.Min(aInner + _grassDepth, TrackOffsetGeometry.InterpolateClosed(offsets, from, _track.Length));
+            float bOuter = Mathf.Min(bInner + _grassDepth, TrackOffsetGeometry.InterpolateClosed(offsets, to, _track.Length));
+            var quad = new[] { a.Position + a.Normal * (aInner * side), a.Position + a.Normal * (aOuter * side),
+                b.Position + b.Normal * (bOuter * side), b.Position + b.Normal * (bInner * side) };
+            float turn = Cross(quad[1] - quad[0], quad[2] - quad[1]);
+            for (int i = 0; i < 4; i++)
+                if (turn * Cross(quad[(i + 1) % 4] - quad[i], quad[(i + 2) % 4] - quad[(i + 1) % 4]) <= 0f)
+                    return;
+            if (_track.InsideOtherRoad((quad[0] + quad[1] + quad[2]) / 3f, Mathf.Repeat(middle, _track.Length))
+                || _track.InsideOtherRoad((quad[0] + quad[2] + quad[3]) / 3f, Mathf.Repeat(middle, _track.Length))
+                || _track.InsideOtherRoad((quad[0] + quad[1] + quad[2] + quad[3]) * 0.25f, Mathf.Repeat(middle, _track.Length)))
+                return;
+            float cellSize = Mathf.Max(_grassDepth, _track.RoadWidth);
+            Vector2 minimum = quad[0];
+            Vector2 maximum = quad[0];
+            foreach (Vector2 point in quad)
+            {
+                minimum = Vector2.Min(minimum, point);
+                maximum = Vector2.Max(maximum, point);
+            }
+            float corridor = _track.RoadWidth * 0.5f + _track.WallThickness + _track.SampleSpacing * 0.5f;
+            Vector2 roadMinimum = minimum - Vector2.one * corridor;
+            Vector2 roadMaximum = maximum + Vector2.one * corridor;
+            float sourceDistance = Mathf.Repeat(middle, _track.Length);
+            for (int i = 0; i < _track.Samples.Count; i++)
+            {
+                Vector2 start = _track.Samples[i].Position;
+                Vector2 end = _track.Samples[(i + 1) % _track.Samples.Count].Position;
+                if (Mathf.Max(start.x, end.x) < roadMinimum.x || Mathf.Min(start.x, end.x) > roadMaximum.x
+                    || Mathf.Max(start.y, end.y) < roadMinimum.y || Mathf.Min(start.y, end.y) > roadMaximum.y)
+                    continue;
+                // Only skip wholly local segments; check boundary-straddling segments conservatively in full.
+                if (GrassSegmentIsLocal(sourceDistance, (i + 0.5f) * _track.SampleSpacing,
+                    _track.Length, _track.SampleSpacing, _track.RoadWidth))
+                    continue;
+                if (GrassQuadIntersectsRoad(quad, start, end, corridor))
+                    return;
+            }
+            int minX = Mathf.FloorToInt(minimum.x / cellSize);
+            int maxX = Mathf.FloorToInt(maximum.x / cellSize);
+            int minY = Mathf.FloorToInt(minimum.y / cellSize);
+            int maxY = Mathf.FloorToInt(maximum.y / cellSize);
+            var checkedQuads = new HashSet<Vector2[]>();
+            for (int x = minX; x <= maxX; x++)
+                for (int y = minY; y <= maxY; y++)
+                    if (occupied.TryGetValue((x, y), out List<Vector2[]> candidates))
+                        foreach (Vector2[] candidate in candidates)
+                            if (checkedQuads.Add(candidate) && GrassQuadsOverlap(quad, candidate))
+                                return;
+            for (int x = minX; x <= maxX; x++)
+                for (int y = minY; y <= maxY; y++)
+                {
+                    if (!occupied.TryGetValue((x, y), out List<Vector2[]> candidates))
+                    {
+                        candidates = new List<Vector2[]>();
+                        occupied.Add((x, y), candidates);
+                    }
+                    candidates.Add(quad);
+                }
+            _ribbonQuads.Add(new TrackVisualQuad("Grass", mesh.VertexCount, from, to));
+            mesh.AddQuad(quad[0], quad[1], quad[2], quad[3], color, 0.01f);
+        }
+
+        private static float Cross(Vector2 a, Vector2 b)
+        {
+            return a.x * b.y - a.y * b.x;
+        }
+
+        private static bool GrassQuadIntersectsRoad(Vector2[] quad, Vector2 start, Vector2 end, float corridor)
+        {
+            return DecorPlacementGeometry.DistanceSquared(quad, new[] { start, end }) <= corridor * corridor;
+        }
+
+        private static bool GrassSegmentIsLocal(float sourceDistance, float midpoint, float length, float spacing, float roadWidth)
+        {
+            float separation = Mathf.Abs(sourceDistance - midpoint);
+            return Mathf.Min(separation, length - separation) + spacing * 0.5f <= roadWidth * 3f;
+        }
+
+        private static bool GrassQuadsOverlap(Vector2[] first, Vector2[] second)
+        {
+            // Separating axes distinguish positive-area overlap from valid shared edges.
+            for (int polygon = 0; polygon < 2; polygon++)
+            {
+                Vector2[] points = polygon == 0 ? first : second;
+                for (int edge = 0; edge < 4; edge++)
+                {
+                    Vector2 delta = points[(edge + 1) % 4] - points[edge];
+                    Vector2 axis = new Vector2(-delta.y, delta.x).normalized;
+                    float firstMin = float.PositiveInfinity;
+                    float firstMax = float.NegativeInfinity;
+                    float secondMin = float.PositiveInfinity;
+                    float secondMax = float.NegativeInfinity;
+                    for (int i = 0; i < 4; i++)
+                    {
+                        float a = Vector2.Dot(first[i], axis);
+                        float b = Vector2.Dot(second[i], axis);
+                        firstMin = Mathf.Min(firstMin, a);
+                        firstMax = Mathf.Max(firstMax, a);
+                        secondMin = Mathf.Min(secondMin, b);
+                        secondMax = Mathf.Max(secondMax, b);
+                    }
+                    if (firstMax <= secondMin + 0.00001f || secondMax <= firstMin + 0.00001f)
+                        return false;
+                }
+            }
+            return true;
         }
 
         private void BuildRibbons()
@@ -217,7 +411,6 @@ namespace Ghostline.Game
             var curbs = new ColoredMesh();
             _curbRuns.Clear();
             _tireRuns.Clear();
-            _ribbonQuads.Clear();
             float roadEdge = _track.RoadWidth * 0.5f;
             float lineOuter = roadEdge - _edgeInset;
             float lineInner = lineOuter - _edgeWidth;
@@ -496,13 +689,13 @@ namespace Ghostline.Game
             private readonly List<Color> _colors = new List<Color>();
             public int VertexCount => _vertices.Count;
 
-            public void AddQuad(Vector2 a, Vector2 b, Vector2 c, Vector2 d, Color color)
+            public void AddQuad(Vector2 a, Vector2 b, Vector2 c, Vector2 d, Color color, float depth = 0f)
             {
                 int offset = _vertices.Count;
-                _vertices.Add(a);
-                _vertices.Add(b);
-                _vertices.Add(c);
-                _vertices.Add(d);
+                _vertices.Add(new Vector3(a.x, a.y, depth));
+                _vertices.Add(new Vector3(b.x, b.y, depth));
+                _vertices.Add(new Vector3(c.x, c.y, depth));
+                _vertices.Add(new Vector3(d.x, d.y, depth));
                 Color vertexColor = QualitySettings.activeColorSpace == ColorSpace.Linear ? color.linear : color;
                 for (int i = 0; i < 4; i++)
                     _colors.Add(vertexColor);

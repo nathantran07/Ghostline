@@ -60,7 +60,8 @@ The road is one closed mesh strip. Visible walls are mesh strips over **EdgeColl
 | TrackVisuals setting | Default | Meaning |
 | --- | --- | --- |
 | Show Grass / Show Edge Lines / Show Curbs | All on | Independent presentation toggles; disabled categories retain empty meshes and existing objects |
-| Grass Color / Grass Stripe Color / Grass Stripe Width | RGB 9/24/13 / RGB 14/36/18 / 8 | Two alternating greens in horizontal bands anchored at local Y = 0; existing Grass Color values are preserved |
+| Grass Band Color / Grass Alternate Color / Grass Base Color | #2F6B2F / #3A7D3A / #285C2A | Track-following ribbons over flat base grass; replaces obsolete horizontal-stripe fields without editing Main |
+| Band Length / Grass Depth | 6 / 14 | Alternate by centerline arc length from distance zero; extend outward from each wall, reducing depth for tight corners and clearance |
 | Grass Margin / Screen Height | 18 / 18 | One combined ground mesh; margin is at least the larger of the configured height and the Main Camera's current orthographic height, on every side |
 | White / Red / Black | White / RGB 217/11/10 / RGB 4/4/4 | Paint, alternating curb/tire blocks, and checker colors |
 | Edge Width / Inset | 0.15 / 0.05 | White edge strip fully on the asphalt |
@@ -79,9 +80,11 @@ The road is one closed mesh strip. Visible walls are mesh strips over **EdgeColl
 
 Sorting orders: grass **-7**; barriers/tire walls **-6**; road **-5**; edge lines **-4**; curbs **-3**; grid **-2**; sectors **-1**; checker **0**. Existing checkpoint sprites **2**, wall surface **3**, ghost **4**, player **5**, and screen-space HUD retain their orders. The plain start sprite and the two replaced sector-boundary sprites are hidden; their transforms, trigger dimensions, indices, and wiring are retained. The pink start sector line has a visible leading edge beside the checker.
 
-For the grass/road-paint visual checkpoint, keep your existing Main scene open, select **Ghostline/Track > TrackVisuals**, and enter Play. Adjust the two grass colors, Grass Stripe Width, and category toggles outside Play, then restart Play to rebuild only the transient visuals with unchanged track settings. Do not use **Build Scene** on your edited scene. No installer or scene rebuild is needed for this checkpoint. Stripe width must be finite and positive; settings requiring more than 4096 grass bands fail explicitly. The first and last bands are clipped to the existing ground bounds, with no gaps or extra renderers.
+For grass ribbons, keep your existing Main scene open, select **Ghostline/Track > TrackVisuals**, and enter Play. Adjust Band Length, Grass Depth, the three grass colors, and category toggles outside Play, then restart Play to regenerate transient visuals. Do not use **Build Scene** on your edited scene. New grass fields supply the new defaults without rewriting the scene's old stripe settings. Band length must be finite and positive, with at most 4096 bands around the lap; depth must be finite and nonnegative. Zero depth leaves only the base grass.
 
-Run **TrackVisualGeometryTests** in EditMode to check stripe continuity/colors, independent toggles, invalid widths, kerb side/curvature/stripe selection, crossover clearance, sorting, and collider/gate preservation. Inspect the start and corner previews and drive a lap to review stripe contrast and paint visibility. The minimap remains an ordinary UI overlay; there is no decor exclusion or text rendering.
+Grass uses the wall geometry helpers on separate offsets: inner-corner clamping, closed-profile smoothing using the existing track margin/smoothing settings, and local intersection reductions. Ribbons split at exact global arc-length boundaries, shorten the last band at the loop seam, and leave flat-base gaps where geometry cannot clear the crossover or would fold/overlap. Base and ribbons share one UInt32 mesh/submesh, at local Z 0.02 and 0.01 respectively. Decor remains at Z 0 with its existing sorting: trees, grandstands, tire stacks, and banners at **1**, and trackside barriers/tire walls at **-6**, all above grass **-7**. Layouts and seeds are unchanged.
+
+Run **TrackVisualGeometryTests** in EditMode for arc-length colors, normal alignment, depth limits, folded/overlapping strips, crossover clearance, independent toggles, and unchanged decor geometry. The decor visibility test renders every decor mesh alone and with grass and compares its visible pixels. Batch tests export **Logs/GrassStartFinishPreview.png**, **Logs/GrassTightCornerPreview.png**, and **Logs/GrassCrossoverPreview.png** for visual review.
 
 ### Trackside decor checkpoint (commit 2)
 

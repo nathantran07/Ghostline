@@ -212,12 +212,13 @@ namespace Ghostline.Tests.Scene
                     image.ReadPixels(new Rect(0f, 0f, 1600f, 900f), 0, 0);
                     image.Apply();
                     TrackSample sample = track.GetSample(20f);
-                    Vector3 viewport = camera.WorldToViewportPoint(sample.Position);
+                    Vector3 viewport = camera.WorldToViewportPoint(track.transform.TransformPoint(sample.Position));
                     Color roadColor = image.GetPixel(Mathf.RoundToInt(viewport.x * 1599f), Mathf.RoundToInt(viewport.y * 899f));
-                    Assert.That(roadColor.r, Is.GreaterThan(image.GetPixel(10, 10).r + 0.03f));
-                    Assert.That(roadColor.g, Is.GreaterThan(roadColor.r));
-                    Assert.That(roadColor.b, Is.GreaterThan(roadColor.g));
-                    Assert.That(roadColor.r, Is.EqualTo(0.17f).Within(0.02f), "The road must render dark gray, including in Linear color space.");
+                    Color expected = new SerializedObject(track).FindProperty("_roadColor").colorValue;
+                    Assert.That(roadColor.r, Is.EqualTo(expected.r).Within(0.02f));
+                    Assert.That(roadColor.g, Is.EqualTo(expected.g).Within(0.02f));
+                    Assert.That(roadColor.b, Is.EqualTo(expected.b).Within(0.02f),
+                        "The unlit road must render its serialized color, including in Linear color space.");
                     if (Application.isBatchMode)
                     {
                         Directory.CreateDirectory("Logs");

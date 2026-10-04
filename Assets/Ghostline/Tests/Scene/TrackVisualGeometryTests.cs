@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Ghostline.Game;
@@ -51,65 +52,286 @@ namespace Ghostline.Tests.Scene
         }
 
         [Test]
-        public void GrassBandsAlternateSerializedColorsWithoutGapsAndClipToGroundBounds()
+        public void GrassSettingsUseTrackRibbonDefaults()
+        {
+            var go = new GameObject("Grass defaults", typeof(TrackVisuals));
+            try
+            {
+                var settings = new SerializedObject(go.GetComponent<TrackVisuals>());
+                Assert.That(settings.FindProperty("_bandLength"), Is.Not.Null);
+                Assert.That(settings.FindProperty("_bandLength").floatValue, Is.EqualTo(6f));
+                Assert.That(settings.FindProperty("_grassDepth").floatValue, Is.EqualTo(14f));
+                Assert.That(settings.FindProperty("_grassBandColor").colorValue,
+                    Is.EqualTo(new Color(47f / 255f, 107f / 255f, 47f / 255f)));
+                Assert.That(settings.FindProperty("_grassAlternateColor").colorValue,
+                    Is.EqualTo(new Color(58f / 255f, 125f / 255f, 58f / 255f)));
+                Assert.That(settings.FindProperty("_grassBaseColor").colorValue,
+                    Is.EqualTo(new Color(40f / 255f, 92f / 255f, 42f / 255f)));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void GrassRejectsRoadBetweenClearVerticesAndCenters()
+        {
+            var quad = new[] { new Vector2(1.9f, -0.1f), new Vector2(15.9f, -0.1f),
+                new Vector2(15.9f, 0.1f), new Vector2(1.9f, 0.1f) };
+            float[] sampledOffsets = { 1.9f, 15.9f, 8.9f, (1.9f + 15.9f * 2f) / 3f, (1.9f * 2f + 15.9f) / 3f };
+            Assert.That(sampledOffsets.All(x => Mathf.Abs(x - 4.2f) > 2.1f), Is.True);
+            var method = typeof(TrackVisuals).GetMethod("GrassQuadIntersectsRoad",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            Assert.That(method, Is.Not.Null, "Grass needs full-footprint road clearance.");
+            Assert.That(method.Invoke(null, new object[] { quad, new Vector2(4.2f, -1f), new Vector2(4.2f, 1f), 2.1f }), Is.True);
+        }
+
+        [Test]
+        public void GrassSkipsOnlyRoadSegmentsWhollyInsideTheLocalArc()
+        {
+            var method = typeof(TrackVisuals).GetMethod("GrassSegmentIsLocal",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            Assert.That(method, Is.Not.Null);
+            Assert.That(method.Invoke(null, new object[] { 0f, 9.8f, 100f, 0.2f, 3.4f }), Is.True);
+            Assert.That(method.Invoke(null, new object[] { 0f, 10.2f, 100f, 0.2f, 3.4f }), Is.False,
+                "A segment straddling the 10.2-unit local cutoff must retain its nonlocal portion.");
+            Assert.That(method.Invoke(null, new object[] { 0f, 99.9f, 100f, 0.2f, 3.4f }), Is.True,
+                "Local adjacency wraps across the closed-loop seam.");
+        }
+
+        [TestCase(6f)]
+        [TestCase(12.5f)]
+        [TestCase(1000f)]
+        public void GrassRibbonsFollowNormalsAndGlobalArcLengthBands(float bandLength)
         {
             WithTrack(track =>
             {
                 TrackVisuals visuals = track.GetComponent<TrackVisuals>();
                 var settings = new SerializedObject(visuals);
-                Assert.That(settings.FindProperty("_grassStripeColor"), Is.Not.Null);
-                Assert.That(settings.FindProperty("_grassStripeWidth"), Is.Not.Null);
-                float originalWidth = settings.FindProperty("_grassStripeWidth").floatValue;
-                Color originalColor = settings.FindProperty("_grassColor").colorValue;
-                Color originalStripeColor = settings.FindProperty("_grassStripeColor").colorValue;
+                float original = settings.FindProperty("_bandLength").floatValue;
                 try
                 {
-                    settings.FindProperty("_grassColor").colorValue = new Color(0.15f, 0.3f, 0.1f);
-                    settings.FindProperty("_grassStripeColor").colorValue = new Color(0.25f, 0.45f, 0.2f);
-                    settings.ApplyModifiedPropertiesWithoutUndo();
-                    foreach (float width in new[] { 8f, 12.5f, 1000f })
+                    SetFloat(visuals, "_bandLength", bandLength);
+                    RebuildVisuals(track);
+                    Mesh mesh = VisualMesh(track, "Grass");
+                    Vector3[] vertices = mesh.vertices;
+                    Color[] colors = mesh.colors;
+                    TrackVisualQuad[] quads = visuals.RibbonQuads.Where(q => q.Layer == "Grass").ToArray();
+                    Assert.That(quads, Is.Not.Empty);
+                    Assert.That(mesh.vertexCount, Is.EqualTo(4 + quads.Length * 4));
+                    Assert.That(mesh.subMeshCount, Is.EqualTo(1));
+                    Assert.That(mesh.indexFormat, Is.EqualTo(UnityEngine.Rendering.IndexFormat.UInt32));
+                    Assert.That(vertices.Take(4).All(v => v.z > vertices[4].z), Is.True);
+                    Assert.That(colors.Take(4), Is.All.EqualTo(VertexColor(settings.FindProperty("_grassBaseColor").colorValue)));
+                    bool diagonal = false;
+                    bool fullDepth = false;
+                    bool reducedDepth = false;
+                    foreach (TrackVisualQuad quad in quads)
                     {
-                        SetFloat(visuals, "_grassStripeWidth", width);
-                        RebuildVisuals(track);
-                        Mesh grass = VisualMesh(track, "Grass");
-                        Vector3[] vertices = grass.vertices;
-                        Color[] colors = grass.colors;
-                        int firstBand = Mathf.FloorToInt(grass.bounds.min.y / width);
-                        int lastBand = Mathf.CeilToInt(grass.bounds.max.y / width);
-                        Assert.That(vertices.Length, Is.EqualTo((lastBand - firstBand) * 4));
-                        Assert.That(grass.triangles.Length, Is.EqualTo((lastBand - firstBand) * 6));
-                        Assert.That(grass.subMeshCount, Is.EqualTo(1));
-                        float previousTop = grass.bounds.min.y;
-                        settings.Update();
-                        for (int band = firstBand; band < lastBand; band++)
+                        float middle = (quad.FromDistance + quad.ToDistance) * 0.5f;
+                        int band = Mathf.FloorToInt(middle / bandLength);
+                        Assert.That(quad.FromDistance, Is.GreaterThanOrEqualTo(band * bandLength - 0.0001f));
+                        Assert.That(quad.ToDistance, Is.LessThanOrEqualTo(Mathf.Min((band + 1) * bandLength, track.Length) + 0.0001f));
+                        Color expected = VertexColor(settings.FindProperty(band % 2 == 0 ? "_grassBandColor" : "_grassAlternateColor").colorValue);
+                        int offset = quad.VertexOffset;
+                        for (int i = 0; i < 4; i++)
+                            Assert.That(colors[offset + i], Is.EqualTo(expected));
+                        for (int end = 0; end < 2; end++)
                         {
-                            int offset = (band - firstBand) * 4;
-                            Assert.That(vertices[offset].x, Is.EqualTo(grass.bounds.min.x));
-                            Assert.That(vertices[offset + 1].x, Is.EqualTo(grass.bounds.max.x));
-                            Assert.That(vertices[offset].y, Is.EqualTo(previousTop).Within(0.0001f));
-                            Assert.That(vertices[offset + 1].y, Is.EqualTo(previousTop).Within(0.0001f));
-                            float top = Mathf.Min(grass.bounds.max.y, (band + 1) * width);
-                            Assert.That(vertices[offset + 2].y, Is.EqualTo(top).Within(0.0001f));
-                            Assert.That(vertices[offset + 3].y, Is.EqualTo(top).Within(0.0001f));
-                            Assert.That(top, Is.GreaterThan(previousTop));
-                            Color expected = settings.FindProperty(band % 2 == 0 ? "_grassColor" : "_grassStripeColor").colorValue;
-                            if (QualitySettings.activeColorSpace == ColorSpace.Linear)
-                                expected = expected.linear;
-                            for (int i = 0; i < 4; i++)
-                                Assert.That(colors[offset + i], Is.EqualTo(expected));
-                            previousTop = top;
+                            float distance = end == 0 ? quad.FromDistance : quad.ToDistance;
+                            TrackSample sample = track.GetSample(distance);
+                            Vector2 inner = vertices[offset + (end == 0 ? 0 : 3)];
+                            Vector2 outer = vertices[offset + (end == 0 ? 1 : 2)];
+                            Assert.That(Mathf.Abs(Vector2.Dot(inner - sample.Position, sample.Tangent)), Is.LessThan(0.0001f));
+                            Assert.That(Mathf.Abs(Vector2.Dot(outer - sample.Position, sample.Tangent)), Is.LessThan(0.0001f));
+                            Assert.That(Mathf.Abs(Vector2.Dot(inner - sample.Position, sample.Normal)),
+                                Is.EqualTo(track.GetRoadWidth(distance) * 0.5f + track.WallThickness).Within(0.0001f));
+                            float depth = Vector2.Distance(inner, outer);
+                            Assert.That(depth, Is.InRange(0.0001f, 14.0001f));
+                            fullDepth |= depth > 13.99f;
+                            reducedDepth |= depth < 13f;
+                            diagonal |= Mathf.Abs(sample.Normal.x) > 0.2f && Mathf.Abs(sample.Normal.y) > 0.2f;
                         }
-                        Assert.That(previousTop, Is.EqualTo(grass.bounds.max.y));
+                        float first = TriangleArea(vertices[offset], vertices[offset + 1], vertices[offset + 2]);
+                        float second = TriangleArea(vertices[offset], vertices[offset + 2], vertices[offset + 3]);
+                        Assert.That(first * second, Is.GreaterThan(0f), "Grass quad must not fold.");
+                    }
+                    Assert.That(diagonal && fullDepth && reducedDepth, Is.True);
+                    AssertGrassDoesNotOverlap(mesh, quads);
+                }
+                finally
+                {
+                    SetFloat(visuals, "_bandLength", original);
+                    RebuildVisuals(track);
+                }
+            });
+        }
+
+        [TestCase(-1f)]
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        public void InvalidGrassDepthFailsExplicitly(float depth)
+        {
+            WithTrack(track =>
+            {
+                TrackVisuals visuals = track.GetComponent<TrackVisuals>();
+                var settings = new SerializedObject(visuals);
+                float original = settings.FindProperty("_grassDepth").floatValue;
+                try
+                {
+                    SetFloat(visuals, "_grassDepth", depth);
+                    Assert.Throws<InvalidOperationException>(() => RebuildVisuals(track));
+                }
+                finally
+                {
+                    SetFloat(visuals, "_grassDepth", original);
+                    RebuildVisuals(track);
+                }
+            });
+        }
+
+        [Test]
+        public void ZeroGrassDepthKeepsOnlyFlatBase()
+        {
+            WithTrack(track =>
+            {
+                TrackVisuals visuals = track.GetComponent<TrackVisuals>();
+                var settings = new SerializedObject(visuals);
+                float original = settings.FindProperty("_grassDepth").floatValue;
+                try
+                {
+                    SetFloat(visuals, "_grassDepth", 0f);
+                    RebuildVisuals(track);
+                    Assert.That(VisualMesh(track, "Grass").vertexCount, Is.EqualTo(4));
+                    Assert.That(visuals.RibbonQuads.Any(q => q.Layer == "Grass"), Is.False);
+                }
+                finally
+                {
+                    SetFloat(visuals, "_grassDepth", original);
+                    RebuildVisuals(track);
+                }
+            });
+        }
+
+        [Test]
+        public void GrassRebuildPreservesDecorAndEveryDecorMeshRendersAboveGrass()
+        {
+            WithDecorTrack((track, decor) =>
+            {
+                DecorFootprint[] footprints = decor.Footprints.ToArray();
+                string settings = EditorJsonUtility.ToJson(decor);
+                var meshes = decor.GeneratedRoot.GetComponentsInChildren<MeshFilter>()
+                    .ToDictionary(f => f.name, f => (f.sharedMesh.vertices, f.sharedMesh.triangles, f.sharedMesh.colors));
+                RebuildVisuals(track);
+                decor.Rebuild();
+                Assert.That(EditorJsonUtility.ToJson(decor), Is.EqualTo(settings));
+                CollectionAssert.AreEqual(footprints, decor.Footprints);
+                foreach (MeshFilter filter in decor.GeneratedRoot.GetComponentsInChildren<MeshFilter>())
+                {
+                    CollectionAssert.AreEqual(meshes[filter.name].vertices, filter.sharedMesh.vertices);
+                    CollectionAssert.AreEqual(meshes[filter.name].triangles, filter.sharedMesh.triangles);
+                    CollectionAssert.AreEqual(meshes[filter.name].colors, filter.sharedMesh.colors);
+                }
+                MeshRenderer grass = track.GeneratedRoot.Find("Grass").GetComponent<MeshRenderer>();
+                Assert.That(grass.sortingOrder, Is.EqualTo(-7));
+                MeshRenderer[] decorated = decor.GeneratedRoot.GetComponentsInChildren<MeshRenderer>()
+                    .Concat(new[] { track.GeneratedRoot.Find("Barriers").GetComponent<MeshRenderer>(),
+                        track.GeneratedRoot.Find("Tire Walls").GetComponent<MeshRenderer>() }).ToArray();
+                Renderer[] renderers = track.transform.parent.GetComponentsInChildren<Renderer>();
+                bool[] enabled = renderers.Select(r => r.enabled).ToArray();
+                var cameraObject = new GameObject("Grass visibility camera", typeof(Camera));
+                SceneManager.MoveGameObjectToScene(cameraObject, track.gameObject.scene);
+                var target = new RenderTexture(512, 512, 24);
+                var image = new Texture2D(512, 512, TextureFormat.RGBA32, false);
+                RenderTexture previous = RenderTexture.active;
+                try
+                {
+                    Camera camera = ConfigureGrassCamera(cameraObject, track, target);
+                    foreach (Renderer renderer in renderers)
+                        renderer.enabled = false;
+                    foreach (MeshRenderer renderer in decorated)
+                    {
+                        Assert.That(renderer.sortingOrder, Is.GreaterThan(grass.sortingOrder), renderer.name);
+                        Assert.That(renderer.sortingLayerID, Is.EqualTo(grass.sortingLayerID), renderer.name);
+                        Bounds bounds = renderer.bounds;
+                        camera.orthographicSize = Mathf.Max(bounds.extents.x, bounds.extents.y) + 1f;
+                        cameraObject.transform.position = new Vector3(bounds.center.x, bounds.center.y, -10f);
+                        renderer.enabled = true;
+                        grass.enabled = false;
+                        Color32[] alone = ReadGrassPixels(camera, target, image);
+                        grass.enabled = true;
+                        Color32[] withGrass = ReadGrassPixels(camera, target, image);
+                        int visible = 0;
+                        for (int i = 0; i < alone.Length; i++)
+                            if (alone[i].r + alone[i].g + alone[i].b > 10)
+                            {
+                                visible++;
+                                Assert.That(Mathf.Abs(alone[i].r - withGrass[i].r)
+                                    + Mathf.Abs(alone[i].g - withGrass[i].g) + Mathf.Abs(alone[i].b - withGrass[i].b),
+                                    Is.LessThanOrEqualTo(3), renderer.name + " was obscured by grass.");
+                            }
+                        Assert.That(visible, Is.GreaterThan(20), renderer.name + " must actually render.");
+                        renderer.enabled = false;
                     }
                 }
                 finally
                 {
-                    settings.Update();
-                    settings.FindProperty("_grassColor").colorValue = originalColor;
-                    settings.FindProperty("_grassStripeColor").colorValue = originalStripeColor;
-                    settings.ApplyModifiedPropertiesWithoutUndo();
-                    SetFloat(visuals, "_grassStripeWidth", originalWidth);
-                    RebuildVisuals(track);
+                    for (int i = 0; i < renderers.Length; i++)
+                        renderers[i].enabled = enabled[i];
+                    RenderTexture.active = previous;
+                    UnityEngine.Object.DestroyImmediate(cameraObject);
+                    UnityEngine.Object.DestroyImmediate(image);
+                    target.Release();
+                    UnityEngine.Object.DestroyImmediate(target);
+                }
+            });
+        }
+
+        [Test]
+        public void GrassExportsStartFinishTightCornerAndCrossoverPreviews()
+        {
+            WithDecorTrack((track, decor) =>
+            {
+                RebuildVisuals(track);
+                // Select a sustained tight turn rather than a single spline-join curvature spike.
+                int window = Mathf.Max(1, Mathf.CeilToInt(2f / track.SampleSpacing));
+                int tightest = Enumerable.Range(0, track.Samples.Count)
+                    .OrderByDescending(i => Enumerable.Range(-window, window * 2 + 1)
+                        .Sum(offset => Mathf.Abs(track.GetSignedCurvature((i + offset + track.Samples.Count) % track.Samples.Count)))).First();
+                Vector2[] centers = { track.GetSample(0f).Position, track.Samples[tightest].Position,
+                    track.Crossings.Single().Position };
+                string[] paths = { "Logs/GrassStartFinishPreview.png", "Logs/GrassTightCornerPreview.png", "Logs/GrassCrossoverPreview.png" };
+                var cameraObject = new GameObject("Grass preview camera", typeof(Camera));
+                SceneManager.MoveGameObjectToScene(cameraObject, track.gameObject.scene);
+                var target = new RenderTexture(1600, 900, 24);
+                var image = new Texture2D(1600, 900, TextureFormat.RGBA32, false);
+                RenderTexture previous = RenderTexture.active;
+                try
+                {
+                    Camera camera = ConfigureGrassCamera(cameraObject, track, target);
+                    camera.orthographicSize = 19f * Mathf.Abs(track.transform.lossyScale.y);
+                    for (int i = 0; i < centers.Length; i++)
+                    {
+                        camera.orthographicSize = (i == 1 ? 12f : 19f) * Mathf.Abs(track.transform.lossyScale.y);
+                        Vector3 world = track.transform.TransformPoint(centers[i]);
+                        cameraObject.transform.position = new Vector3(world.x, world.y, -10f);
+                        Color32[] pixels = ReadGrassPixels(camera, target, image);
+                        Assert.That(pixels.Any(c => c.g > c.r + 20 && c.g > c.b + 20), Is.True);
+                        if (Application.isBatchMode)
+                        {
+                            Directory.CreateDirectory("Logs");
+                            File.WriteAllBytes(paths[i], image.EncodeToPNG());
+                        }
+                    }
+                }
+                finally
+                {
+                    RenderTexture.active = previous;
+                    UnityEngine.Object.DestroyImmediate(cameraObject);
+                    UnityEngine.Object.DestroyImmediate(image);
+                    target.Release();
+                    UnityEngine.Object.DestroyImmediate(target);
                 }
             });
         }
@@ -167,22 +389,22 @@ namespace Ghostline.Tests.Scene
         [TestCase(float.NaN)]
         [TestCase(float.PositiveInfinity)]
         [TestCase(0.000001f)]
-        public void InvalidOrExcessiveGrassStripeWidthsFailExplicitly(float width)
+        public void InvalidOrExcessiveGrassBandLengthsFailExplicitly(float width)
         {
             WithTrack(track =>
             {
                 TrackVisuals visuals = track.GetComponent<TrackVisuals>();
                 var settings = new SerializedObject(visuals);
-                Assert.That(settings.FindProperty("_grassStripeWidth"), Is.Not.Null);
-                float original = settings.FindProperty("_grassStripeWidth").floatValue;
+                Assert.That(settings.FindProperty("_bandLength"), Is.Not.Null);
+                float original = settings.FindProperty("_bandLength").floatValue;
                 try
                 {
-                    SetFloat(visuals, "_grassStripeWidth", width);
+                    SetFloat(visuals, "_bandLength", width);
                     Assert.Throws<InvalidOperationException>(() => RebuildVisuals(track));
                 }
                 finally
                 {
-                    SetFloat(visuals, "_grassStripeWidth", original);
+                    SetFloat(visuals, "_bandLength", original);
                     RebuildVisuals(track);
                 }
             });
@@ -229,7 +451,7 @@ namespace Ghostline.Tests.Scene
             {
                 TrackVisuals visuals = track.GetComponent<TrackVisuals>();
                 var vertices = new Dictionary<string, Vector3[]>();
-                string[] layers = { "Edge Lines", "Curbs", "Barriers", "Tire Walls" };
+                string[] layers = { "Grass", "Edge Lines", "Curbs", "Barriers", "Tire Walls" };
                 foreach (string layer in layers)
                     vertices.Add(layer, VisualMesh(track, layer).vertices);
                 foreach (TrackVisualQuad quad in visuals.RibbonQuads)
@@ -243,7 +465,7 @@ namespace Ghostline.Tests.Scene
                             Is.False, quad.Layer + " intrudes into another road corridor.");
                         TrackSample source = track.GetSample(distance);
                         float lateral = Mathf.Abs(Vector2.Dot((Vector2)points[offset + i] - source.Position, source.Normal));
-                        if (quad.Layer == "Barriers" || quad.Layer == "Tire Walls")
+                        if (quad.Layer == "Grass" || quad.Layer == "Barriers" || quad.Layer == "Tire Walls")
                             Assert.That(lateral, Is.GreaterThanOrEqualTo(track.GetRoadWidth(distance) * 0.5f + track.WallThickness - 0.0001f));
                         else
                             Assert.That(lateral, Is.LessThanOrEqualTo(track.GetRoadWidth(distance) * 0.5f - 0.0499f));
@@ -256,7 +478,7 @@ namespace Ghostline.Tests.Scene
                     Assert.That(track.InsideOtherRoad(secondTriangle, Mathf.Repeat((quad.FromDistance + quad.ToDistance * 2f) / 3f, track.Length)), Is.False);
                 }
                 foreach (string layer in layers)
-                    Assert.That(visuals.RibbonQuads.Count(q => q.Layer == layer) * 4, Is.EqualTo(vertices[layer].Length));
+                    Assert.That(visuals.RibbonQuads.Count(q => q.Layer == layer) * 4 + (layer == "Grass" ? 4 : 0), Is.EqualTo(vertices[layer].Length));
                 TrackCrossing crossing = track.Crossings.Single();
                 Assert.That(track.InsideOtherRoad(track.GetSample(crossing.FirstDistance).Position, crossing.FirstDistance), Is.True);
                 Assert.That(track.InsideOtherRoad(track.GetSample(crossing.SecondDistance).Position, crossing.SecondDistance), Is.True);
@@ -454,6 +676,130 @@ namespace Ghostline.Tests.Scene
                 Assert.Throws<InvalidOperationException>(() => visuals.GetSpawnSample(track));
                 SetFloat(visuals, "_tireCurvatureThreshold", 0.13f);
             });
+        }
+
+        private static Color VertexColor(Color color)
+        {
+            return QualitySettings.activeColorSpace == ColorSpace.Linear ? color.linear : color;
+        }
+
+        private static Camera ConfigureGrassCamera(GameObject cameraObject, TrackGenerator track, RenderTexture target)
+        {
+            Camera camera = cameraObject.GetComponent<Camera>();
+            camera.scene = track.gameObject.scene;
+            camera.cameraType = CameraType.Preview;
+            camera.enabled = false;
+            camera.orthographic = true;
+            camera.allowMSAA = false;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
+            camera.targetTexture = target;
+            return camera;
+        }
+
+        private static Color32[] ReadGrassPixels(Camera camera, RenderTexture target, Texture2D image)
+        {
+            camera.Render();
+            RenderTexture.active = target;
+            image.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+            image.Apply();
+            return image.GetPixels32();
+        }
+
+        private static void WithDecorTrack(Action<TrackGenerator, DecorGenerator> assertion)
+        {
+            WithTrack(track =>
+            {
+                DecorGenerator decor = track.GetComponent<DecorGenerator>();
+                bool added = decor == null;
+                if (added)
+                    decor = track.gameObject.AddComponent<DecorGenerator>();
+                bool originalEnabled = decor.enabled;
+                try
+                {
+                    decor.enabled = true;
+                    decor.Rebuild();
+                    assertion(track, decor);
+                }
+                finally
+                {
+                    if (added)
+                        UnityEngine.Object.DestroyImmediate(decor);
+                    else
+                        decor.enabled = originalEnabled;
+                }
+            });
+        }
+
+        private static float TriangleArea(Vector2 a, Vector2 b, Vector2 c)
+        {
+            return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+        }
+
+        private static void AssertGrassDoesNotOverlap(Mesh mesh, IReadOnlyList<TrackVisualQuad> quads)
+        {
+            Vector3[] vertices = mesh.vertices;
+            var cells = new Dictionary<(int X, int Y), List<Vector2[]>>();
+            foreach (TrackVisualQuad quad in quads)
+            {
+                Vector2[] polygon = Enumerable.Range(0, 4).Select(i => (Vector2)vertices[quad.VertexOffset + i]).ToArray();
+                int minX = Mathf.FloorToInt(polygon.Min(p => p.x) / 8f);
+                int maxX = Mathf.FloorToInt(polygon.Max(p => p.x) / 8f);
+                int minY = Mathf.FloorToInt(polygon.Min(p => p.y) / 8f);
+                int maxY = Mathf.FloorToInt(polygon.Max(p => p.y) / 8f);
+                var checkedPolygons = new HashSet<Vector2[]>();
+                for (int x = minX; x <= maxX; x++)
+                    for (int y = minY; y <= maxY; y++)
+                    {
+                        if (!cells.TryGetValue((x, y), out List<Vector2[]> candidates))
+                        {
+                            candidates = new List<Vector2[]>();
+                            cells.Add((x, y), candidates);
+                        }
+                        foreach (Vector2[] candidate in candidates)
+                            if (checkedPolygons.Add(candidate))
+                                Assert.That(PolygonIntersectionArea(polygon, candidate), Is.LessThanOrEqualTo(0.0001d),
+                                    "Grass ribbon interiors overlap.");
+                        candidates.Add(polygon);
+                    }
+            }
+        }
+
+        private static double PolygonIntersectionArea(Vector2[] first, Vector2[] second)
+        {
+            // Independent double-precision clipping: shared edges have zero intersection area.
+            var clipped = first.Select(p => ((double)p.x, (double)p.y)).ToList();
+            double orientation = Math.Sign(TriangleArea(second[0], second[1], second[2]));
+            for (int edge = 0; edge < second.Length && clipped.Count > 0; edge++)
+            {
+                Vector2 a = second[edge];
+                Vector2 b = second[(edge + 1) % second.Length];
+                var input = clipped;
+                clipped = new List<(double, double)>();
+                (double, double) previous = input[input.Count - 1];
+                double previousSide = orientation * ((b.x - (double)a.x) * (previous.Item2 - a.y)
+                    - (b.y - (double)a.y) * (previous.Item1 - a.x));
+                foreach ((double, double) current in input)
+                {
+                    double side = orientation * ((b.x - (double)a.x) * (current.Item2 - a.y)
+                        - (b.y - (double)a.y) * (current.Item1 - a.x));
+                    if ((side >= 0d) != (previousSide >= 0d))
+                    {
+                        double fraction = previousSide / (previousSide - side);
+                        clipped.Add((previous.Item1 + (current.Item1 - previous.Item1) * fraction,
+                            previous.Item2 + (current.Item2 - previous.Item2) * fraction));
+                    }
+                    if (side >= 0d)
+                        clipped.Add(current);
+                    previous = current;
+                    previousSide = side;
+                }
+            }
+            double area = 0d;
+            for (int i = 1; i + 1 < clipped.Count; i++)
+                area += (clipped[i].Item1 - clipped[0].Item1) * (clipped[i + 1].Item2 - clipped[0].Item2)
+                    - (clipped[i].Item2 - clipped[0].Item2) * (clipped[i + 1].Item1 - clipped[0].Item1);
+            return Math.Abs(area) * 0.5d;
         }
 
         private static void AssertRuns(TrackGenerator track, IReadOnlyList<TrackVisualRun> runs, float threshold, float minimum, float turnSide)

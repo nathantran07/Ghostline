@@ -44,6 +44,8 @@ namespace Ghostline.Game
 
         public float RoadWidth => _roadWidth;
         public float WallThickness => _wallThickness;
+        public float RadiusMargin => _radiusMargin;
+        public float OffsetSmoothingLength => _offsetSmoothingLength;
         public int CheckpointCount => _checkpointCount;
         public Transform GeneratedRoot => _generatedRoot;
         public Mesh GeneratedRoadMesh => _roadMesh;
