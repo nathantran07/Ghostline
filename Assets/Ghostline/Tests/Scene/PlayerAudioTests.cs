@@ -96,13 +96,24 @@ namespace Ghostline.Tests.Scene
             using (var rig = new Rig())
             {
                 var cues = new List<int>();
+                var cueTicks = new List<int>();
+                int tick = 0;
                 int restarts = 0;
-                rig.Race.CountdownCue += cues.Add;
+                rig.Race.CountdownCue += cue =>
+                {
+                    cues.Add(cue);
+                    cueTicks.Add(tick);
+                };
                 rig.Race.Restarted += () => restarts++;
                 rig.Race.Restart();
                 for (int i = 0; i < 200; i++)
+                {
+                    tick++;
                     Invoke(rig.Race, "FixedUpdate");
+                }
                 Assert.That(cues, Is.EqualTo(new[] { 3, 2, 1, 0 }));
+                Assert.That(cueTicks, Is.EqualTo(new[] { 0, 50, 100, 150 }),
+                    "Preserve existing beeps at 0/1/2 seconds and the start cue at lights out.");
                 rig.Race.Restart();
                 Assert.That(restarts, Is.EqualTo(2));
                 Assert.That(cues[cues.Count - 1], Is.EqualTo(3));

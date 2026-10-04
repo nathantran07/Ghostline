@@ -75,6 +75,56 @@ namespace Ghostline.Tests.EditMode
             Assert.That(sequence.State, Is.EqualTo(StartSequenceState.Go));
         }
 
+        [TestCase(0f, 1, false)]
+        [TestCase(0.599f, 1, false)]
+        [TestCase(0.6f, 2, false)]
+        [TestCase(1.199f, 2, false)]
+        [TestCase(1.2f, 3, false)]
+        [TestCase(1.799f, 3, false)]
+        [TestCase(1.8f, 4, false)]
+        [TestCase(2.399f, 4, false)]
+        [TestCase(2.4f, 5, false)]
+        [TestCase(2.999f, 5, false)]
+        [TestCase(3f, 0, true)]
+        [TestCase(3.749f, 0, true)]
+        [TestCase(3.75f, 0, true)]
+        [TestCase(100f, 0, true)]
+        public void GantryLampBoundariesAndSkippedPhases(float tick, int litLamps, bool driving)
+        {
+            var sequence = new StartSequence();
+            sequence.Tick(tick);
+            Assert.That(sequence.LitLampCount, Is.EqualTo(litLamps));
+            Assert.That(sequence.DrivingAllowed, Is.EqualTo(driving));
+            sequence.Reset();
+            Assert.That(sequence.LitLampCount, Is.EqualTo(1));
+            Assert.That(sequence.DrivingAllowed, Is.False);
+        }
+
+        [TestCase(0.02f)]
+        [TestCase(0.0199999921f)]
+        public void GantryLampChangesFollowFixedSteps(float step)
+        {
+            var sequence = new StartSequence();
+            for (int tick = 0; tick <= 150; tick++)
+            {
+                Assert.That(sequence.LitLampCount, Is.EqualTo(tick == 150 ? 0 : 1 + tick / 30),
+                    $"Lamp state at fixed tick {tick}");
+                Assert.That(sequence.DrivingAllowed, Is.EqualTo(tick == 150));
+                sequence.Tick(step);
+            }
+        }
+
+        [Test]
+        public void GantryUsesConfiguredCountdownDurationWithoutChangingStartTime()
+        {
+            var sequence = new StartSequence(0.5f, 0.25f);
+            sequence.Tick(0.3f);
+            Assert.That(sequence.LitLampCount, Is.EqualTo(2));
+            sequence.Tick(1.2f);
+            Assert.That(sequence.LitLampCount, Is.Zero);
+            Assert.That(sequence.State, Is.EqualTo(StartSequenceState.Go));
+        }
+
         [TestCase(-1f)]
         [TestCase(float.NaN)]
         [TestCase(float.PositiveInfinity)]

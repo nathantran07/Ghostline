@@ -27,7 +27,7 @@ namespace Ghostline.Game
         [SerializeField, Min(0f)] private float _reverseAcceleration = 8f;
         [SerializeField, Min(0f)] private float _reverseThreshold = 0.3f;
         [Header("Steering and grip")]
-        [SerializeField, Min(1f)] private float _steering = 150f;
+        [SerializeField, Min(1f)] private float _steering = 160f;
         [SerializeField] private AnimationCurve _steeringCurve = new AnimationCurve(
             new Keyframe(0f, 1f, -0.6f, -0.6f), new Keyframe(1f, 0.4f, -0.3f, -0.3f),
             new Keyframe(2f, 0.25f, -0.15f, -0.15f));

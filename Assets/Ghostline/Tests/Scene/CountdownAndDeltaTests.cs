@@ -25,11 +25,13 @@ namespace Ghostline.Tests.Scene
                 hud.Configure(null, null, null, countdown, delta);
                 var sequence = new StartSequence();
                 hud.RenderCountdown(sequence);
-                Assert.That(countdown.text, Is.EqualTo("3"));
-                Assert.That(countdown.enabled, Is.True);
+                Assert.That(countdown.text, Is.Empty);
+                Assert.That(countdown.enabled, Is.False);
+                AssertGantry(countdown, 1, true);
                 sequence.Tick(4f);
                 hud.RenderCountdown(sequence);
                 Assert.That(countdown.enabled, Is.False);
+                AssertGantry(countdown, 0, false);
                 hud.ShowDelta(-0.142f);
                 Assert.That(delta.text, Is.EqualTo("-0.142"));
                 Assert.That(delta.color, Is.EqualTo(Color.green));
@@ -128,12 +130,16 @@ namespace Ghostline.Tests.Scene
                 SetField(manager, "_bestLap", best);
                 manager.Restart();
                 Assert.That(car.InputEnabled, Is.False);
-                Assert.That(countdown.text, Is.EqualTo("3"));
+                AssertGantry(countdown, 1, true);
                 manager.CrossTrigger(car, true, 0);
                 Assert.That(session.Timer.State, Is.EqualTo(LapTimerState.NotStarted));
-                for (int i = 0; i < 150; i++)
+                for (int i = 0; i < 149; i++)
                     Invoke(manager, "FixedUpdate");
+                Assert.That(car.InputEnabled, Is.False);
+                AssertGantry(countdown, 5, true);
+                Invoke(manager, "FixedUpdate");
                 Assert.That(car.InputEnabled, Is.True, "Countdown must unlock after 150 configured fixed ticks.");
+                AssertGantry(countdown, 0, true);
                 Assert.That(session.Timer.ElapsedTime, Is.Zero);
                 Assert.That(visual.GetComponent<SpriteRenderer>().enabled, Is.False);
                 manager.CrossTrigger(car, true, 0);
@@ -153,7 +159,7 @@ namespace Ghostline.Tests.Scene
                 manager.Restart();
                 Assert.That(car.CanDrive, Is.True);
                 Assert.That(car.InputEnabled, Is.False);
-                Assert.That(countdown.text, Is.EqualTo("3"));
+                AssertGantry(countdown, 1, true);
                 Assert.That(delta.text, Is.Empty);
                 Assert.That(visual.GetComponent<SpriteRenderer>().enabled, Is.False);
             }
@@ -161,6 +167,16 @@ namespace Ghostline.Tests.Scene
             {
                 Object.DestroyImmediate(root);
             }
+        }
+
+        private static void AssertGantry(TMP_Text countdown, int litLamps, bool visible)
+        {
+            Transform gantry = countdown.transform.Find("Start Gantry");
+            Assert.That(gantry, Is.Not.Null, "HUD must create the runtime start gantry.");
+            Assert.That(gantry.gameObject.activeSelf, Is.EqualTo(visible));
+            StartGantryView view = gantry.GetComponent<StartGantryView>();
+            Assert.That(view, Is.Not.Null);
+            Assert.That(view.LitLampCount, Is.EqualTo(litLamps));
         }
 
         private static TMP_Text CreateText(Transform parent, string name)

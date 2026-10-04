@@ -15,6 +15,7 @@ namespace Ghostline.Game
         private const float DeltaDisplaySeconds = 3f;
         private const float DeltaFadeSeconds = 1f;
         private float _deltaSecondsRemaining;
+        private StartGantryView _startGantry;
 
         public void Configure(TMP_Text currentTimeText, TMP_Text bestTimeText, TMP_Text statusText,
             TMP_Text countdownText = null, TMP_Text deltaText = null)
@@ -30,8 +31,20 @@ namespace Ghostline.Game
         {
             if (_countdownText == null)
                 return;
-            _countdownText.text = sequence.Label;
-            _countdownText.enabled = sequence.Label.Length > 0;
+            if (_startGantry == null)
+            {
+                var gantryObject = new GameObject("Start Gantry", typeof(RectTransform), typeof(StartGantryView));
+                gantryObject.hideFlags = HideFlags.DontSave;
+                gantryObject.transform.SetParent(_countdownText.transform, false);
+                var rectangle = gantryObject.GetComponent<RectTransform>();
+                rectangle.anchorMin = rectangle.anchorMax = rectangle.pivot = new Vector2(0.5f, 0.5f);
+                rectangle.sizeDelta = new Vector2(360f, 96f);
+                _startGantry = gantryObject.GetComponent<StartGantryView>();
+                _startGantry.raycastTarget = false;
+            }
+            _countdownText.text = string.Empty;
+            _countdownText.enabled = false;
+            _startGantry.Render(sequence.State, sequence.LitLampCount);
         }
 
         public void ShowDelta(float? deltaSeconds)

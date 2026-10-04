@@ -5,11 +5,11 @@ namespace Ghostline.Core
     /// <summary>The presentation and input phases of a standing start.</summary>
     public enum StartSequenceState
     {
-        /// <summary>Shows 3, 2, and 1 with driving locked.</summary>
+        /// <summary>Accumulates red start lamps with driving locked.</summary>
         Counting,
-        /// <summary>Shows GO with driving allowed.</summary>
+        /// <summary>Shows lights out with driving allowed.</summary>
         Go,
-        /// <summary>Hides the label with driving still allowed.</summary>
+        /// <summary>Hides the gantry with driving still allowed.</summary>
         Done
     }
 
@@ -40,10 +40,24 @@ namespace Ghostline.Core
         public StartSequenceState State => !HasReached(3d * _countDuration) ? StartSequenceState.Counting
             : !HasReached(3d * _countDuration + _goDuration) ? StartSequenceState.Go : StartSequenceState.Done;
 
-        /// <summary>Gets 3, 2, 1, GO, or the empty string after completion.</summary>
+        /// <summary>Gets legacy 3, 2, 1, GO, or empty labels for the unchanged audio schedule.</summary>
         public string Label => State == StartSequenceState.Done ? string.Empty
             : State == StartSequenceState.Go ? "GO"
             : HasReached(2d * _countDuration) ? "1" : HasReached(_countDuration) ? "2" : "3";
+
+        /// <summary>Gets cumulative gantry lamps; lights out at the existing driving-unlock boundary.</summary>
+        public int LitLampCount
+        {
+            get
+            {
+                if (State != StartSequenceState.Counting)
+                    return 0;
+                int count = 1;
+                while (count < 5 && HasReached(count * (3d * _countDuration / 5d)))
+                    count++;
+                return count;
+            }
+        }
 
         /// <summary>Gets whether countdown locking has ended; true from GO onward.</summary>
         public bool DrivingAllowed => State != StartSequenceState.Counting;
@@ -55,7 +69,7 @@ namespace Ghostline.Core
             _elapsed = Math.Min(_elapsed + deltaTime, 3d * _countDuration + _goDuration);
         }
 
-        /// <summary>Returns to 3 with driving locked.</summary>
+        /// <summary>Returns to one lit lamp and legacy label 3 with driving locked.</summary>
         public void Reset()
         {
             _elapsed = 0d;
