@@ -33,6 +33,7 @@ For rebuilding and tuning the circuit, use [SCENE_SETUP.md](SCENE_SETUP.md). Tha
 | A / Left | Steer left |
 | D / Right | Steer right |
 | R | Reset the car and current attempt, restart the countdown; preserve the saved best |
+| M | Mute/unmute all player audio; keep configured volume levels |
 
 The yellow Lambo starts behind the upper-right start line, facing down-right into corner 1. Follow corners 1 through 18 and continue straight through the flat crossover on each visit. Release acceleration or briefly brake before corners. Steering requires movement and reverses naturally while backing up.
 
@@ -45,6 +46,32 @@ With a saved best, the delta beside the lap time updates at each accepted gate a
 Save format **6** stores gameplay version and track ID (`suzuka`) with checkpoint splits. Missing or mismatched metadata discards the saved lap and ghost quietly, including format-5 records. A new valid lap can replace an incompatible record regardless of its old time.
 
 The ghost is hidden before the start and when there is no valid best lap. It replays the previous best on the current lap clock and remains at its final pose if the current attempt takes longer. A new best becomes the replay on the next reset. Lap timing and trigger detection use Unity's fixed physics steps; they do not estimate sub-step crossing times.
+
+## Synthesized player audio
+
+For an existing scene, stop Play mode and run **Tools > Ghostline > Add Audio To Scene**. The installer reuses the player audio components, supports Undo, preserves custom audio tuning and authored scene objects, and marks the scene dirty without saving. **Build Scene** includes audio in a fresh scene. Audio belongs to the player car, with exactly one AudioListener on the main camera; the ghost stays silent for engine, collisions, countdown, and lap events.
+
+The default V12 voice generates one short decaying burst per cylinder firing: **rpm / 60 * 6 Hz**, so 6,000 RPM produces 600 firings per second. A single clock alternates the two banks. Bank Timing Offset introduces opposing offsets within a firing pair; Bank Detune adds slow, bounded timing drift whose opposing offsets cancel over each pair. Per-pulse amplitude and timing jitter use a serialized seed. The pulse and noise random streams are separate, and seed zero is supported. This is a procedural Aventador-inspired voice, with no recorded audio or external audio assets.
+
+Three parallel resonant bandpass filters shape the exhaust/intake body, then a low-pass follows actual RPM from **1,500 Hz at idle to 5,000 Hz at redline**. Throttle adds filtered intake/exhaust noise. The pulses use four-times oversampling and a code-generated decimation filter. Filter frequencies are limited to sample-rate-safe bounds; supported Q is 0.2 to 20 and pulse width is 0.0001 to 0.02 seconds. Unsupported firing rates above the pulse passband are silenced; invalid settings are rejected. **Pitch Scale** changes synthesized frequencies in both voices; it does not change RPM, gears, shifts, handling, or the firing-frequency function. The existing single-clutch shift gap and throttle cut still drive audio loudness.
+
+On the player **EngineAudio**, toggle **Use Additive Voice** during Play to compare the previous harmonic voice with the pulse voice. A short crossfade switches without restarting the AudioSource. Additive harmonic/crank weights remain available for that voice. Other voice controls are captured when EngineAudio is enabled: re-enable the component or restart Play after changing them. A generated looping silent clip starts on enable so the real audio callback runs; a stopped source produces a one-time warning.
+
+Tune these Inspector fields first:
+
+| Field | Starting value | What it changes |
+| --- | --- | --- |
+| Pulse Width | 0.0012 s | Approximate burst duration to 99% decay; changes bite and body |
+| Resonances: Frequency / Q / Gain | 180 Hz / 1.2 / 0.5; 650 Hz / 1.5 / 0.3; 1,800 Hz / 1.0 / 0.2 | Exhaust/intake character; higher Q narrows each resonance |
+| Pitch Scale | 1.0 | Overall pitch for either voice |
+| Bank Timing Offset / Bank Detune | 0.01 / 0.003 | Bank separation and slow timing variation, as fractions of firing timing |
+| Amplitude Jitter / Timing Jitter | 0.03 / 0.02 | Per-pulse irregularity; zero disables random jitter |
+| Low Pass Min / Max | 1,500 / 5,000 Hz | Brightness at idle and redline |
+| Intake Exhaust Noise | 0.06 | Throttle-scaled air/exhaust texture |
+
+**PlayerAudioSettings** defaults to master **0.5**, engine **0.4**, and SFX **0.6**. Volume ramps and the final soft clip retain peak headroom. Wall thuds scale with player impact speed; countdown/start beeps, lap chimes, and new-best chimes are generated in code. Optional tire noise remains off by default. The installer upgrades only the exact original factory additive harmonic preset; custom presets remain intact. Serialized scenes contain no generated AudioClips.
+
+`PulseEngineSettings`, `PulseTrain`, `ResonantBandpass`, and `PulseEngineSynthesizer` live in engine-free Core. `EngineSoundModel`, `EngineSoundSettings`, and `AudioMath.FiringFrequency` retain their existing behavior. Audio configuration is built on the main thread, then published through the existing immutable cached-target handoff. Rendering uses preallocated state and reuses the caller's buffer for A/B mixing; it allocates no managed memory and calls no Unity API on the audio thread. Playback state and random sequences persist across callback boundaries.
 
 ## Structure
 
@@ -130,7 +157,9 @@ Placement uses seed **271828**, margin **0.8**, bounded attempts, and separate r
 
 ## Tests
 
-Stop Play mode. Open **Window > General > Test Runner > EditMode > Run All**. Core tests cover `LapTimerTests`, `CheckpointTrackerTests`, `GhostRecordingTests`, `GhostRecorderTests`, `BestLapRepositoryTests`, `RaceSessionTests`, `DeltaCalculatorTests`, and `StartSequenceTests`. Nested EditMode storage tests cover JSON split round trips, replacement, invalid splits, and older versions. Scene tests additionally cover generated geometry, crossover clearance, race wiring, car presentation, countdown input locking, HUD formatting/fading, and final deltas against the previous best.
+Stop Play mode. Open **Window > General > Test Runner > EditMode > Run All**. Audio coverage includes `PulseEngineSynthesizerTests` (firing spacing, alternating banks, seeded determinism, filter stability before clipping, pitch, buffer continuity, and zero warm-render allocations), the retained `EngineSynthesizerTests`, and `PlayerAudioTests` / `AudioInstallerTests` (real audio callbacks, live A/B switching, mute, player-only events, conservative volumes, scene preservation, and Undo/Redo). Listening remains a separate Play-mode review. Core tests cover `LapTimerTests`, `CheckpointTrackerTests`, `GhostRecordingTests`, `GhostRecorderTests`, `BestLapRepositoryTests`, `RaceSessionTests`, `DeltaCalculatorTests`, and `StartSequenceTests`. Nested EditMode storage tests cover JSON split round trips, replacement, invalid splits, and older versions. Scene tests additionally cover generated geometry, crossover clearance, race wiring, car presentation, countdown input locking, HUD formatting/fading, and final deltas against the previous best.
+
+Pulse-voice verification with Unity **6000.6.4f1** passed **383/383 EditMode cases**, with zero failures or skips, in an isolated project copy. The standalone pure-Core run passed **238/238**. The suite includes the rendered 8 kHz/minimum-width alias regression and warm-render allocation check. Subjective engine character, resonance balance, and audible shift transitions still require listening review.
 
 The minimap adds **23 Core cases** in `MinimapProjectionTests` and **14 scene cases** in `MinimapViewTests` / `MinimapInstallerTests`. Both scene fixtures run directly from **Window > General > Test Runner > EditMode** with no extra setup or scene installation. They create their own objects and disposable preview scene, require no saved ghost or TMP-resource import, and never rebuild or save Main. Coverage includes closed-loop/tick drawing, smoothed edges, world transforms, resize alignment, countdown spawn, missing/end-of-playback visibility, texture cleanup, automatic wiring, repeat installation, repair, preserved tuning, and Undo. The existing scene-test assembly already references Game, Editor, UI, and the Test Framework; no assembly or package changes are needed.
 
