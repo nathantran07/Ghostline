@@ -24,8 +24,17 @@ namespace Ghostline.Game
         [SerializeField, Min(0.1f)] private float _limiterFrequency = 18f;
         [Header("Engine timbre")]
         [Tooltip("Weights for orders 1 through 12 of rpm / 60 * 6 Hz.")]
-        [SerializeField] private float[] _harmonicWeights = { 1f, 0.65f, 0.5f, 0.4f, 0.32f, 0.25f,
-            0.18f, 0.14f, 0.1f, 0.08f, 0.06f, 0.04f };
+        [SerializeField] private float[] _harmonicWeights = EngineVoiceSettings.CreateDefaultHarmonics();
+        [Tooltip("Crank orders are relative to rpm / 60 Hz, below the V12 firing fundamental.")]
+        [SerializeField, Range(0f, 1f)] private float _crankWeight = 0.8f;
+        [SerializeField, Range(0f, 1f)] private float _halfOrderWeight = 0.15f;
+        [SerializeField, Range(0f, 1f)] private float _secondCrankWeight = 0.45f;
+        [SerializeField, Range(0f, 1f)] private float _thirdCrankWeight = 0.35f;
+        [Tooltip("Scales every oscillator frequency; the RPM model and filter tracking are unchanged.")]
+        [SerializeField, Min(0.01f)] private float _pitchScale = 1f;
+        [Tooltip("Harmonic low-pass cutoff at idle and redline, in Hz. Applied before intake/exhaust noise.")]
+        [SerializeField, Min(1f)] private float _lowPassMin = 1500f;
+        [SerializeField, Min(1f)] private float _lowPassMax = 5000f;
         [SerializeField, Range(0f, 0.02f)] private float _bankDetune = 0.003f;
         [SerializeField, Range(0f, 1f)] private float _intakeExhaustNoise = 0.06f;
         [SerializeField, Min(0.001f)] private float _audioRampTime = 0.02f;
@@ -43,6 +52,13 @@ namespace Ghostline.Game
         private bool _warnedNotPlaying;
         private int _renderedBuffers;
         public int RenderedBufferCount => Volatile.Read(ref _renderedBuffers);
+
+        /// <summary>Installer migration: preserves every custom harmonic preset and other tuning field.</summary>
+        public void UpgradeFactoryHarmonics()
+        {
+            if (EngineVoiceSettings.IsLegacyFactoryHarmonics(_harmonicWeights))
+                _harmonicWeights = EngineVoiceSettings.CreateDefaultHarmonics();
+        }
 
         // This immutable managed object contains no Unity references. The renderer is audio-thread-owned.
         private sealed class Targets
@@ -157,7 +173,10 @@ namespace Ghostline.Game
             int rate = AudioSettings.outputSampleRate;
             if (rate < 8000 || rate > 384000)
                 rate = 48000;
-            _synthesizer = new EngineSynthesizer(rate, _harmonicWeights, _bankDetune, _intakeExhaustNoise, _audioRampTime);
+            var voice = new EngineVoiceSettings(_crankWeight, _halfOrderWeight, _secondCrankWeight,
+                _thirdCrankWeight, _pitchScale, _lowPassMin, _lowPassMax, _idleRpm, _redlineRpm);
+            _synthesizer = new EngineSynthesizer(rate, _harmonicWeights, _bankDetune,
+                _intakeExhaustNoise, _audioRampTime, voice);
             ResetEngine();
             _source.Stop();
             ReleaseCarrier();

@@ -41,6 +41,28 @@ namespace Ghostline.Tests.Scene
         }
 
         [Test]
+        public void RetunedVoiceInspectorDefaultsMatchPureCore()
+        {
+            using (var rig = new Rig())
+            {
+                var serialized = new UnityEditor.SerializedObject(rig.Engine);
+                var defaults = new EngineVoiceSettings();
+                Assert.That(serialized.FindProperty("_crankWeight").floatValue, Is.EqualTo(defaults.CrankWeight));
+                Assert.That(serialized.FindProperty("_halfOrderWeight").floatValue, Is.EqualTo(defaults.HalfOrderWeight));
+                Assert.That(serialized.FindProperty("_secondCrankWeight").floatValue, Is.EqualTo(defaults.SecondCrankWeight));
+                Assert.That(serialized.FindProperty("_thirdCrankWeight").floatValue, Is.EqualTo(defaults.ThirdCrankWeight));
+                Assert.That(serialized.FindProperty("_pitchScale").floatValue, Is.EqualTo(1f));
+                Assert.That(serialized.FindProperty("_lowPassMin").floatValue, Is.EqualTo(1500f));
+                Assert.That(serialized.FindProperty("_lowPassMax").floatValue, Is.EqualTo(5000f));
+                var weights = serialized.FindProperty("_harmonicWeights");
+                float[] expected = EngineVoiceSettings.CreateDefaultHarmonics();
+                Assert.That(weights.arraySize, Is.EqualTo(expected.Length));
+                for (int i = 0; i < expected.Length; i++)
+                    Assert.That(weights.GetArrayElementAtIndex(i).floatValue, Is.EqualTo(expected[i]));
+            }
+        }
+
+        [Test]
         public void CountdownPublishesEachPlayerCueOnceAndRestartBeginsAtThree()
         {
             using (var rig = new Rig())
