@@ -45,6 +45,9 @@ namespace Ghostline.Game
         public float RoadWidth => _roadWidth;
         public float WallThickness => _wallThickness;
         public int CheckpointCount => _checkpointCount;
+        public Transform GeneratedRoot => _generatedRoot;
+        public Mesh GeneratedRoadMesh => _roadMesh;
+        public Mesh GeneratedWallMesh => _wallMesh;
         public float Length { get; private set; }
         public float SampleSpacing => Length / _sampleCount;
         public float MinimumRadius { get; private set; }
@@ -150,6 +153,9 @@ namespace Ghostline.Game
             if (race.CheckpointCount != _checkpointCount)
                 throw new InvalidOperationException("Configure RaceManager with the track's checkpoint count before generation.");
             SampleSpline();
+            DecorGenerator decor = GetComponent<DecorGenerator>();
+            if (decor != null && decor.isActiveAndEnabled)
+                decor.ValidateForBuild();
             PrepareWallPaths();
             FindCrossings();
             ReportWidthLimits();
@@ -220,6 +226,7 @@ namespace Ghostline.Game
         {
             ReleaseMeshes();
             GetComponent<TrackVisuals>()?.ReleaseMeshes();
+            GetComponent<DecorGenerator>()?.ReleaseMeshes();
         }
 
         private void SampleSpline()
@@ -546,6 +553,9 @@ namespace Ghostline.Game
             _wallMesh = CreateMesh("Ghostline Walls", vertices, triangles, new Color(0.42f, 0.47f, 0.54f));
             _wallFilter.sharedMesh = _wallMesh;
             GetComponent<TrackVisuals>()?.Build(this, _generatedRoot, _material);
+            DecorGenerator decor = GetComponent<DecorGenerator>();
+            if (decor != null && decor.isActiveAndEnabled)
+                decor.Rebuild();
         }
 
         private static void AddStrip(List<Vector3> vertices, List<int> triangles, Vector2[] left, Vector2[] right)

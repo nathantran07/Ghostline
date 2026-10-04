@@ -150,7 +150,7 @@ namespace Ghostline.Editor
 
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var root = new GameObject("Ghostline");
-            var track = new GameObject("Track", typeof(SplineContainer), typeof(TrackGenerator), typeof(TrackVisuals));
+            var track = new GameObject("Track", typeof(SplineContainer), typeof(TrackGenerator), typeof(TrackVisuals), typeof(DecorGenerator));
             track.transform.SetParent(root.transform, false);
             var positions = new float3[SuzukaNormalizedKnots.Length];
             // The default driving curve and drag balance near 17.1 units/s.

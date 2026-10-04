@@ -43,11 +43,12 @@ namespace Ghostline.Game
         {
             if (track == null)
                 throw new ArgumentNullException(nameof(track));
-            foreach (string path in new[] { "Generated Circuit/Road", "Generated Circuit/Walls/Wall Surface" })
+            foreach (string path in new[] { "Road", "Walls/Wall Surface" })
             {
-                Transform child = track.transform.Find(path);
-                Mesh mesh = child != null ? child.GetComponent<MeshFilter>().sharedMesh : null;
-                if (mesh == null)
+                Transform child = track.GeneratedRoot != null ? track.GeneratedRoot.Find(path) : null;
+                // Static batching can replace renderer meshes with combined world-space buffers.
+                Mesh mesh = path == "Road" ? track.GeneratedRoadMesh : track.GeneratedWallMesh;
+                if (child == null || mesh == null)
                     throw new InvalidOperationException("Build the track before generating decor.");
                 Matrix4x4 matrix = track.transform.worldToLocalMatrix * child.localToWorldMatrix;
                 Vector3[] vertices = mesh.vertices;
@@ -58,7 +59,7 @@ namespace Ghostline.Game
                     Add(new[] { (Vector2)vertices[indices[i]], (Vector2)vertices[indices[i + 1]],
                         (Vector2)vertices[indices[i + 2]] }, 0f);
             }
-            foreach (EdgeCollider2D wall in track.transform.Find("Generated Circuit").GetComponentsInChildren<EdgeCollider2D>())
+            foreach (EdgeCollider2D wall in track.GeneratedRoot.GetComponentsInChildren<EdgeCollider2D>())
             {
                 Matrix4x4 matrix = track.transform.worldToLocalMatrix * wall.transform.localToWorldMatrix;
                 // A conservative radius also covers nonuniform child scaling and rounded end caps.

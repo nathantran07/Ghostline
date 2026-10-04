@@ -440,7 +440,7 @@ namespace Ghostline.Tests.Scene
                     Assert.That(gates[i].size, Is.EqualTo(sizes[i]));
                     Assert.That(gates[i].isTrigger, Is.True);
                 }
-                Assert.That(track.GetComponentsInChildren<MeshRenderer>(), Has.Length.EqualTo(10));
+                Assert.That(track.transform.Find("Generated Circuit").GetComponentsInChildren<MeshRenderer>(), Has.Length.EqualTo(10));
             });
         }
 

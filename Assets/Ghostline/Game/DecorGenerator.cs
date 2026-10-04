@@ -7,6 +7,7 @@ namespace Ghostline.Game
 {
     /// <summary>Builds static trackside fills on enable or explicit rebuild; never mutates the circuit.</summary>
     [ExecuteAlways, DefaultExecutionOrder(100)]
+    [DisallowMultipleComponent]
     [RequireComponent(typeof(TrackGenerator))]
     public sealed class DecorGenerator : MonoBehaviour
     {
@@ -59,10 +60,24 @@ namespace Ghostline.Game
         public float PlacementMargin => _placementMargin;
         public Transform GeneratedRoot => _generatedRoot;
 
+        public void ValidateForBuild()
+        {
+            ValidateSettings();
+            Transform generated = transform.Find("Generated");
+            if (generated != null && generated != _generatedRoot)
+                throw new InvalidOperationException("Track/Generated is reserved for decor; preserve and rename the existing authored object first.");
+            TrackGenerator track = GetComponent<TrackGenerator>();
+            int trees = BoundedCount(track.Length * 0.3f * _treeDensity);
+            BoundedCount(track.Length / _groveSpacing);
+            int banners = _bannerDensity == 0f ? 0 : BoundedCount(track.Length / (_bannerSpacing / _bannerDensity));
+            int tires = FindCornerExits(track).Count * Mathf.CeilToInt(_tireDensity);
+            BoundedCount(trees + banners + tires + Mathf.CeilToInt(_grandstandDensity * 2f));
+        }
+
         [ContextMenu("Rebuild Decor")]
         public void Rebuild()
         {
-            ValidateSettings();
+            ValidateForBuild();
             TrackGenerator track = GetComponent<TrackGenerator>();
             var geometry = new DecorPlacementGeometry(track);
             var reserved = new List<DecorFootprint>();
@@ -71,11 +86,11 @@ namespace Ghostline.Game
             PlaceTires(track, geometry, reserved);
             PlaceBanners(track, geometry, reserved);
             PlaceTrees(track, geometry, reserved);
-            Material material = track.transform.Find("Generated Circuit/Road").GetComponent<MeshRenderer>().sharedMaterial;
+            Material material = track.GeneratedRoot.Find("Road").GetComponent<MeshRenderer>().sharedMaterial;
             if (material == null)
                 throw new InvalidOperationException("Decor requires the existing track material.");
             ReleaseMeshes();
-            _generatedRoot = new GameObject("Generated Decor").transform;
+            _generatedRoot = new GameObject("Generated").transform;
             _generatedRoot.SetParent(transform, false);
             _generatedRoot.gameObject.hideFlags = HideFlags.DontSave;
             foreach (DecorCategory category in Enum.GetValues(typeof(DecorCategory)))
@@ -108,6 +123,8 @@ namespace Ghostline.Game
             if (_generatedRoot != null)
             {
                 _generatedRoot.gameObject.SetActive(false);
+                if (Application.isPlaying)
+                    _generatedRoot.name = "Retiring Decor";
                 Release(_generatedRoot.gameObject);
                 _generatedRoot = null;
             }
@@ -120,8 +137,10 @@ namespace Ghostline.Game
 
         private void OnEnable()
         {
-            Transform road = transform.Find("Generated Circuit/Road");
-            if (road != null && road.GetComponent<MeshFilter>().sharedMesh != null)
+            TrackGenerator track = GetComponent<TrackGenerator>();
+            Transform road = track.GeneratedRoot != null ? track.GeneratedRoot.Find("Road") : null;
+            if (_generatedRoot == null && track.isActiveAndEnabled
+                && road != null && track.GeneratedRoadMesh != null)
                 Rebuild();
         }
 
@@ -151,6 +170,19 @@ namespace Ghostline.Game
         private void PlaceTires(TrackGenerator track, DecorPlacementGeometry geometry, List<DecorFootprint> placed)
         {
             var random = Stream(0x24680);
+            foreach (KeyValuePair<float, int> exit in FindCornerExits(track))
+                if (_tireDensity > 0f && random.NextDouble() < Mathf.Min(1f, _tireDensity))
+                    for (int row = 0; row < Mathf.CeilToInt(_tireDensity); row++)
+                        for (int attempt = 0; attempt < _maxPlacementAttempts; attempt++)
+                            if (TryPlace(track, geometry, placed, DecorCategory.Tires,
+                                exit.Key, exit.Value, new Vector2(1.8f, 0.35f),
+                                0.7f + row * 1.8f + attempt * 0.5f, random.Next()))
+                                break;
+        }
+
+        private List<KeyValuePair<float, int>> FindCornerExits(TrackGenerator track)
+        {
+            var exits = new List<KeyValuePair<float, int>>();
             float runLength = 0f;
             int turn = 0;
             for (int i = 0; i < track.Samples.Count; i++)
@@ -159,18 +191,14 @@ namespace Ghostline.Game
                 int direction = Mathf.Abs(curvature) >= _exitCurvatureThreshold ? (curvature > 0f ? 1 : -1) : 0;
                 if (direction != turn)
                 {
-                    if (turn != 0 && runLength >= 1.5f && _tireDensity > 0f && random.NextDouble() < Mathf.Min(1f, _tireDensity))
-                        for (int row = 0; row < Mathf.CeilToInt(_tireDensity); row++)
-                            for (int attempt = 0; attempt < _maxPlacementAttempts; attempt++)
-                                if (TryPlace(track, geometry, placed, DecorCategory.Tires,
-                                    track.Samples[i].Distance + 1.5f, -turn, new Vector2(1.8f, 0.35f),
-                                    0.7f + row * 1.8f + attempt * 0.5f, random.Next()))
-                                    break;
+                    if (turn != 0 && runLength >= 1.5f)
+                        exits.Add(new KeyValuePair<float, int>(track.Samples[i].Distance + 1.5f, -turn));
                     runLength = 0f;
                     turn = direction;
                 }
                 runLength += track.SampleSpacing;
             }
+            return exits;
         }
 
         private void PlaceBanners(TrackGenerator track, DecorPlacementGeometry geometry, List<DecorFootprint> placed)

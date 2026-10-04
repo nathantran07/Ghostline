@@ -29,7 +29,7 @@ namespace Ghostline.Tests.Scene
                 Assert.That(track.WidthLimits, Is.Not.Empty);
                 Assert.That(track.MinimumRadius, Is.GreaterThan(0f));
                 Assert.That(track.Crossings.Count, Is.EqualTo(1));
-                Assert.That(track.GetComponentsInChildren<MeshRenderer>(), Has.Length.EqualTo(10));
+                Assert.That(track.transform.Find("Generated Circuit").GetComponentsInChildren<MeshRenderer>(), Has.Length.EqualTo(10));
                 MeshFilter road = track.transform.Find("Generated Circuit/Road").GetComponent<MeshFilter>();
                 track.enabled = false;
                 Assert.That(road.sharedMesh, Is.Null);
@@ -164,10 +164,10 @@ namespace Ghostline.Tests.Scene
                         root.Find("HUD Canvas").GetComponent<HudView>(), root.Find("Main Camera").GetComponent<CameraFollow>(),
                         24, spawn.Position, rotation);
                     track.Generate(race);
-                    Assert.That(track.transform.childCount, Is.EqualTo(1));
+                    Assert.That(track.transform.childCount, Is.EqualTo(track.GetComponent<DecorGenerator>()?.isActiveAndEnabled == true ? 2 : 1));
                     Assert.That(track.GetComponentsInChildren<CheckpointTrigger>(), Has.Length.EqualTo(25));
                     Assert.That(track.GateDistances, Has.Count.EqualTo(24));
-                    Assert.That(track.GetComponentsInChildren<MeshRenderer>(), Has.Length.EqualTo(10));
+                    Assert.That(track.transform.Find("Generated Circuit").GetComponentsInChildren<MeshRenderer>(), Has.Length.EqualTo(10));
                     foreach (float distance in track.GateDistances)
                         foreach (TrackCrossing crossing in track.Crossings)
                             Assert.That(Vector2.Distance(track.GetSample(distance).Position, crossing.Position), Is.GreaterThan(track.RoadWidth));

@@ -233,6 +233,8 @@ namespace Ghostline.Tests.Scene
         {
             WithDecor((track, decor) =>
             {
+                Assert.That(GhostlineThemeInstaller.AddToScene(track.gameObject.scene), Is.SameAs(decor));
+                Assert.That(decor.GeneratedRoot, Is.SameAs(track.transform.Find("Generated")));
                 var cameraObject = new GameObject("Decor preview camera", typeof(Camera));
                 SceneManager.MoveGameObjectToScene(cameraObject, track.gameObject.scene);
                 var target = new RenderTexture(1600, 900, 24);
@@ -319,6 +321,9 @@ namespace Ghostline.Tests.Scene
             if (!wasLoaded)
                 scene = EditorSceneManager.OpenScene(GhostlineSceneBuilder.ScenePath, OpenSceneMode.Additive);
             DecorGenerator decor = null;
+            bool added = false;
+            bool originalEnabled = false;
+            string originalSettings = null;
             try
             {
                 TrackGenerator track = scene.GetRootGameObjects().Single(g => g.name == "Ghostline")
@@ -328,7 +333,28 @@ namespace Ghostline.Tests.Scene
                 string trackBefore = EditorJsonUtility.ToJson(track);
                 RaceManager race = track.transform.parent.Find("RaceManager").GetComponent<RaceManager>();
                 string raceBefore = EditorJsonUtility.ToJson(race);
-                decor = track.gameObject.AddComponent<DecorGenerator>();
+                decor = track.GetComponent<DecorGenerator>();
+                added = decor == null;
+                if (added)
+                    decor = track.gameObject.AddComponent<DecorGenerator>();
+                else
+                {
+                    originalSettings = JsonUtility.ToJson(decor);
+                    originalEnabled = decor.enabled;
+                    var defaults = new GameObject("Decor test defaults");
+                    defaults.SetActive(false);
+                    SceneManager.MoveGameObjectToScene(defaults, scene);
+                    try
+                    {
+                        JsonUtility.FromJsonOverwrite(JsonUtility.ToJson(defaults.AddComponent<DecorGenerator>()), decor);
+                    }
+                    finally
+                    {
+                        UnityEngine.Object.DestroyImmediate(defaults);
+                    }
+                    decor.enabled = true;
+                    decor.Rebuild();
+                }
                 assertion(track, decor);
                 CollectionAssert.AreEqual(physics, track.GetComponentsInChildren<Collider2D>());
                 CollectionAssert.AreEqual(physicsBefore, physics.Select(EditorJsonUtility.ToJson));
@@ -337,8 +363,15 @@ namespace Ghostline.Tests.Scene
             }
             finally
             {
-                if (decor != null)
+                if (decor != null && added)
                     UnityEngine.Object.DestroyImmediate(decor);
+                else if (decor != null && originalSettings != null)
+                {
+                    JsonUtility.FromJsonOverwrite(originalSettings, decor);
+                    decor.enabled = originalEnabled;
+                    if (originalEnabled)
+                        decor.Rebuild();
+                }
                 if (!wasLoaded)
                     EditorSceneManager.CloseScene(scene, true);
             }
