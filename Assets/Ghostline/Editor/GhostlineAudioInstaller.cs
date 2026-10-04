@@ -107,6 +107,7 @@ namespace Ghostline.Editor
                         Undo.DestroyObjectImmediate(extra);
                 output = output != null ? output : Undo.AddComponent<PlayerAudioOutput>(camera.gameObject);
                 Undo.RecordObjects(new UnityEngine.Object[] { engine, sfx, output }, "Wire Ghostline Audio");
+                engine.UpgradeFactoryHarmonics();
                 engine.Configure(race);
                 sfx.Configure(race, sfxSource);
                 output.Configure(settings);

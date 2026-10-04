@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using Ghostline.Core;
 using Ghostline.Editor;
 using Ghostline.Game;
 using NUnit.Framework;
@@ -77,6 +78,9 @@ namespace Ghostline.Tests.Scene
             var serialized = new SerializedObject(engine);
             serialized.FindProperty("_bankDetune").floatValue = 0.001f;
             serialized.FindProperty("_shiftGap").floatValue = 0.12f;
+            serialized.FindProperty("_pitchScale").floatValue = 0.8f;
+            serialized.FindProperty("_crankWeight").floatValue = 0.6f;
+            serialized.FindProperty("_lowPassMax").floatValue = 4000f;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             var volumes = new SerializedObject(settings);
             volumes.FindProperty("_engineVolume").floatValue = 0.2f;
@@ -102,6 +106,61 @@ namespace Ghostline.Tests.Scene
             Assert.That(EditorJsonUtility.ToJson(output), Is.EqualTo(outputBefore));
             Assert.That(EditorJsonUtility.ToJson(_car.GetComponent<AudioSource>()), Is.EqualTo(sourceBefore));
             Assert.That(authored.transform.localPosition, Is.EqualTo(Vector3.one * 3f));
+        }
+
+        [Test]
+        public void ReinstallationUpgradesOnlyLegacyFactoryWeightsWithUndoAndRedo()
+        {
+            EngineAudio engine = Install();
+            var serialized = new SerializedObject(engine);
+            float[] legacy = { 1f, 0.65f, 0.5f, 0.4f, 0.32f, 0.25f, 0.18f, 0.14f, 0.1f, 0.08f, 0.06f, 0.04f };
+            SetWeights(serialized, legacy);
+            serialized.FindProperty("_pitchScale").floatValue = 0.8f;
+            serialized.FindProperty("_bankDetune").floatValue = 0.001f;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            string before = EditorJsonUtility.ToJson(engine);
+            Install();
+            AssertWeights(engine, EngineVoiceSettings.CreateDefaultHarmonics());
+            Assert.That(new SerializedObject(engine).FindProperty("_pitchScale").floatValue, Is.EqualTo(0.8f));
+            Assert.That(new SerializedObject(engine).FindProperty("_bankDetune").floatValue, Is.EqualTo(0.001f));
+            Undo.FlushUndoRecordObjects();
+            Undo.PerformUndo();
+            Assert.That(EditorJsonUtility.ToJson(engine), Is.EqualTo(before));
+            Undo.PerformRedo();
+            AssertWeights(engine, EngineVoiceSettings.CreateDefaultHarmonics());
+            string upgraded = EditorJsonUtility.ToJson(engine);
+            Assert.That(Install(), Is.SameAs(engine));
+            Assert.That(EditorJsonUtility.ToJson(engine), Is.EqualTo(upgraded));
+        }
+
+        [Test]
+        public void ReinstallationPreservesCustomLegacyLikeHarmonics()
+        {
+            EngineAudio engine = Install();
+            var serialized = new SerializedObject(engine);
+            float[] custom = { 1f, 0.65001f, 0.5f, 0.4f, 0.32f, 0.25f, 0.18f, 0.14f, 0.1f, 0.08f, 0.06f, 0.04f };
+            SetWeights(serialized, custom);
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            string before = EditorJsonUtility.ToJson(engine);
+            Install();
+            AssertWeights(engine, custom);
+            Assert.That(EditorJsonUtility.ToJson(engine), Is.EqualTo(before));
+        }
+
+        private static void SetWeights(SerializedObject serialized, float[] values)
+        {
+            var weights = serialized.FindProperty("_harmonicWeights");
+            weights.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++)
+                weights.GetArrayElementAtIndex(i).floatValue = values[i];
+        }
+
+        private static void AssertWeights(EngineAudio engine, float[] expected)
+        {
+            var weights = new SerializedObject(engine).FindProperty("_harmonicWeights");
+            Assert.That(weights.arraySize, Is.EqualTo(expected.Length));
+            for (int i = 0; i < expected.Length; i++)
+                Assert.That(weights.GetArrayElementAtIndex(i).floatValue, Is.EqualTo(expected[i]));
         }
 
         [Test]
