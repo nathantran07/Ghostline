@@ -6,9 +6,9 @@ A top-down Unity 2D time-trial game with a Suzuka-inspired circuit and a ghost r
 
 *Render of the game scene in an isolated project copy, with a posed player and an in-memory ghost fixture. This is not live gameplay footage.*
 
-**GIF placeholder:** Add a gameplay GIF here.
+![Ghostline gameplay](docs/images/gameplay.gif)
 
-**Demo video placeholder:** Add a demo video link here.
+[Watch the demo video (with sound)](https://youtu.be/h-XSCS6nqCQ)
 
 **Build placeholder:** Download a playable build (GitHub Release link goes here).
 
