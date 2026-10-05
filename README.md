@@ -21,6 +21,7 @@ A top-down Unity 2D time-trial game with a Suzuka-inspired circuit and a ghost r
 - Synthesized Aventador-inspired V12 engine audio.
 - Generated trackside decor, including trees, grandstands, tire stacks, and banners.
 - Local best-lap persistence, including replay samples and checkpoint splits.
+- Best lap and ghost clearing with hold progress, a centered prompt, and timed result messages.
 
 ## Controls and how to run
 
@@ -35,6 +36,8 @@ A top-down Unity 2D time-trial game with a Suzuka-inspired circuit and a ghost r
 | Y | Confirm clearing the saved best lap and ghost while the prompt is open |
 | N / Esc | Cancel the clear-best prompt; it also cancels automatically after 5 seconds |
 | M | Mute or unmute player audio |
+
+Holding Delete shows a progress bar near the center of the screen. Once the prompt opens, a thin bar shows the remaining confirmation time. Success or failure appears as a brief centered message. The attempt continues underneath, and a failed delete keeps the saved best and ghost.
 
 Use **Unity 6000.6.4f1**, as recorded in `ProjectSettings/ProjectVersion.txt`. The project uses the **Universal 2D template** and includes its package and rendering settings.
 
