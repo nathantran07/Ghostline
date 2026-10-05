@@ -2,10 +2,6 @@
 
 A top-down Unity 2D time-trial game with a Suzuka-inspired circuit and a ghost replay of your best lap.
 
-![Render of the Ghostline start/finish area with trackside decor, player car, ghost, HUD, and minimap](docs/images/hero.png)
-
-*Render of the game scene in an isolated project copy, with a posed player and an in-memory ghost fixture. This is not live gameplay footage.*
-
 ![Ghostline gameplay](docs/images/gameplay.gif)
 
 [Watch the demo video (with sound)](https://youtu.be/h-XSCS6nqCQ)
@@ -22,6 +18,12 @@ A top-down Unity 2D time-trial game with a Suzuka-inspired circuit and a ghost r
 - Generated trackside decor, including trees, grandstands, tire stacks, and banners.
 - Local best-lap persistence, including replay samples and checkpoint splits.
 - Best lap and ghost clearing with hold progress, a centered prompt, and timed result messages.
+
+## Screenshots
+
+![Render of the Ghostline start/finish area with trackside decor, player car, ghost, HUD, and minimap](docs/images/hero.png)
+
+*Render of the game scene in an isolated project copy, with a posed player and an in-memory ghost fixture. This is not live gameplay footage.*
 
 ## Controls and how to run
 
