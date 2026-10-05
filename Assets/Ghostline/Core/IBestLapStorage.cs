@@ -8,5 +8,8 @@ namespace Ghostline.Core
 
         /// <summary>Persists a lap; failures may throw and must be handled by the application adapter.</summary>
         void Save(BestLapData data);
+
+        /// <summary>Deletes saved data, tolerating absence; failures propagate to the application adapter.</summary>
+        void Clear();
     }
 }

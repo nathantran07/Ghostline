@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Ghostline.Core;
 using NUnit.Framework;
 
@@ -145,6 +146,42 @@ namespace Ghostline.Tests.EditMode
             Assert.Throws<ArgumentException>(() => new BestLapRepository(new InMemoryStorage(), 2, " "));
         }
 
+        [Test]
+        public void ClearRemovesBestAndSlowerNextLapBecomesTheNewBest()
+        {
+            var storage = new InMemoryStorage();
+            var repository = new BestLapRepository(storage, 2);
+            repository.TrySave(CreateLap(4f));
+            repository.ClearBest();
+            Assert.That(repository.Load(), Is.Null);
+            Assert.That(storage.ClearCount, Is.EqualTo(1));
+            Assert.That(repository.TrySave(CreateLap(10f)), Is.True);
+            Assert.That(repository.Load().LapTime, Is.EqualTo(10f));
+        }
+
+        [Test]
+        public void ClearWithNothingSavedIsIdempotent()
+        {
+            var storage = new InMemoryStorage();
+            var repository = new BestLapRepository(storage, 2);
+            Assert.DoesNotThrow(() => repository.ClearBest());
+            Assert.DoesNotThrow(() => repository.ClearBest());
+            Assert.That(repository.Load(), Is.Null);
+            Assert.That(storage.ClearCount, Is.EqualTo(2));
+            Assert.That(storage.SaveCount, Is.Zero);
+        }
+
+        [Test]
+        public void DeleteFailurePropagatesAndRetainsPreviousBest()
+        {
+            var storage = new InMemoryStorage { FailClear = true };
+            var repository = new BestLapRepository(storage, 2);
+            repository.TrySave(CreateLap(4f));
+            Assert.Throws<IOException>(() => repository.ClearBest());
+            Assert.That(repository.Load().LapTime, Is.EqualTo(4f));
+            Assert.That(repository.TrySave(CreateLap(10f)), Is.False);
+        }
+
         private static BestLapData CreateLap(float time)
         {
             return new BestLapData
@@ -164,6 +201,16 @@ namespace Ghostline.Tests.EditMode
         {
             public BestLapData Data { get; set; }
             public int SaveCount { get; private set; }
+            public int ClearCount { get; private set; }
+            public bool FailClear { get; set; }
+
+            public void Clear()
+            {
+                if (FailClear)
+                    throw new IOException("Test delete failure");
+                Data = null;
+                ClearCount++;
+            }
 
             public BestLapData Load()
             {

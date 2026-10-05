@@ -41,6 +41,12 @@ namespace Ghostline.Core
             return true;
         }
 
+        /// <summary>Clears the saved best; storage failures propagate without changing the previous data.</summary>
+        public void ClearBest()
+        {
+            _storage.Clear();
+        }
+
         /// <summary>Checks version/track identity, duration, poses, and finite ordered checkpoint splits.</summary>
         public static bool IsValid(BestLapData data, int checkpointCount, string trackId = BestLapData.DefaultTrackId)
         {

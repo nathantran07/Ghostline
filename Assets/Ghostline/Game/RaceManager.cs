@@ -19,10 +19,14 @@ namespace Ghostline.Game
         [SerializeField] private string _trackId = BestLapData.DefaultTrackId;
         [SerializeField] private Vector2 _spawnPosition = new Vector2(-2f, -6f);
         [SerializeField] private float _spawnRotation = -90f;
+        [Header("Clear saved best")]
+        [SerializeField, Min(0.01f)] private float _clearBestHoldDuration = 1f;
+        [SerializeField, Min(0.01f)] private float _clearBestConfirmTimeout = 5f;
         private RaceSession _session;
         private BestLapRepository _repository;
         private BestLapData _bestLap;
         private bool _saveFailed;
+        private ClearBestLapFlow _clearBestFlow;
         private readonly StartSequence _startSequence = new StartSequence();
 
         public int CheckpointCount => _session == null ? _checkpointCount : _session.Checkpoints.CheckpointCount;
@@ -91,10 +95,42 @@ namespace Ghostline.Game
                 return;
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
                 Restart();
+            UpdateClearBest(Time.unscaledDeltaTime);
             if (_session.Timer.State == LapTimerState.Running)
                 _ghost.ShowAt(_session.Timer.ElapsedTime);
             _hud.Render(_session, _bestLap, _saveFailed);
             _hud.RenderCountdown(_startSequence);
+        }
+
+        private void UpdateClearBest(float deltaTime)
+        {
+            if (_clearBestFlow == null)
+                _clearBestFlow = new ClearBestLapFlow(_clearBestHoldDuration, _clearBestConfirmTimeout);
+            _hud.TickClearBestMessage(deltaTime);
+            Keyboard keyboard = Keyboard.current;
+            bool clear = _clearBestFlow.Tick(deltaTime,
+                keyboard != null && keyboard.deleteKey.isPressed,
+                keyboard != null && keyboard.yKey.wasPressedThisFrame,
+                keyboard != null && (keyboard.nKey.wasPressedThisFrame || keyboard.escapeKey.wasPressedThisFrame));
+            _hud.RenderClearBest(_clearBestFlow);
+            if (!clear)
+                return;
+            try
+            {
+                // Clear storage first so any failure leaves the in-memory best and ghost intact.
+                _repository.ClearBest();
+                _bestLap = null;
+                _ghost.SetLap(null);
+                _saveFailed = false;
+                _hud.ShowDelta(null);
+                _hud.ShowClearBestResult(true);
+            }
+            catch (Exception exception) when (exception is IOException
+                || exception is UnauthorizedAccessException || exception is SecurityException)
+            {
+                _hud.ShowClearBestResult(false);
+                Debug.LogWarning($"Ghostline could not clear its best lap: {exception.Message}", this);
+            }
         }
 
         private void FixedUpdate()

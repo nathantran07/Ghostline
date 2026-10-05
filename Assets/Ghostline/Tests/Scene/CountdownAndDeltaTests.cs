@@ -220,6 +220,11 @@ namespace Ghostline.Tests.Scene
         {
             public BestLapData Data { get; set; }
 
+            public void Clear()
+            {
+                Data = null;
+            }
+
             public BestLapData Load()
             {
                 return Data;

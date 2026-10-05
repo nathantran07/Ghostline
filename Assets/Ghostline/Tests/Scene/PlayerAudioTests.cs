@@ -346,6 +346,7 @@ namespace Ghostline.Tests.Scene
             private BestLapData _data;
             internal bool FailSave;
             public BestLapData Load() => _data;
+            public void Clear() => _data = null;
             public void Save(BestLapData data)
             {
                 if (FailSave)

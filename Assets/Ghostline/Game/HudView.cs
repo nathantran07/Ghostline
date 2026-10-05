@@ -15,6 +15,11 @@ namespace Ghostline.Game
         private const float DeltaDisplaySeconds = 3f;
         private const float DeltaFadeSeconds = 1f;
         private float _deltaSecondsRemaining;
+        private const float ClearBestMessageSeconds = 2f;
+        private ClearBestLapFlow _clearBestFlow;
+        private ClearBestLapView _clearBestView;
+        private string _clearBestMessage;
+        private float _clearBestMessageSecondsRemaining;
         private StartGantryView _startGantry;
 
         public void Configure(TMP_Text currentTimeText, TMP_Text bestTimeText, TMP_Text statusText,
@@ -71,6 +76,54 @@ namespace Ghostline.Game
             _deltaText.color = color;
             if (_deltaSecondsRemaining == 0f)
                 ShowDelta(null);
+        }
+
+        public void RenderClearBest(ClearBestLapFlow flow)
+        {
+            _clearBestFlow = flow;
+            RefreshClearBestView();
+        }
+
+        public void ShowClearBestResult(bool cleared)
+        {
+            _clearBestMessage = cleared ? "Best lap cleared" : "Could not clear best lap (see Console)";
+            _clearBestMessageSecondsRemaining = ClearBestMessageSeconds;
+            RefreshClearBestView();
+        }
+
+        public void TickClearBestMessage(float deltaTime)
+        {
+            _clearBestMessageSecondsRemaining = Mathf.Max(0f, _clearBestMessageSecondsRemaining - deltaTime);
+            RefreshClearBestView();
+        }
+
+        private void RefreshClearBestView()
+        {
+            string message = _clearBestMessageSecondsRemaining > 0f ? _clearBestMessage : null;
+            if (_clearBestView == null)
+            {
+                if ((_clearBestFlow == null || _clearBestFlow.State == ClearBestLapState.Idle) && message == null)
+                    return;
+                Canvas canvas = _statusText != null ? _statusText.canvas : GetComponentInParent<Canvas>();
+                if (canvas == null)
+                    return;
+                var overlay = new GameObject("Clear Best Lap Overlay", typeof(RectTransform), typeof(ClearBestLapView));
+                overlay.hideFlags = HideFlags.DontSave;
+                overlay.transform.SetParent(canvas.transform, false);
+                _clearBestView = overlay.GetComponent<ClearBestLapView>();
+                _clearBestView.Initialize(canvas, _statusText != null ? _statusText.font : TMP_Settings.defaultFontAsset);
+            }
+            _clearBestView.Render(_clearBestFlow, message);
+        }
+
+        private void OnDestroy()
+        {
+            if (_clearBestView == null)
+                return;
+            if (Application.isPlaying)
+                Destroy(_clearBestView.gameObject);
+            else
+                DestroyImmediate(_clearBestView.gameObject);
         }
 
         public void Render(RaceSession session, BestLapData bestLap, bool saveFailed)

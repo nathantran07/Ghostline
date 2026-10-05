@@ -61,6 +61,19 @@ namespace Ghostline.Game
             }
         }
 
+        public void Clear()
+        {
+            // File.Delete tolerates a missing file; do not mask access or sharing failures.
+            try
+            {
+                File.Delete(_path);
+            }
+            catch (DirectoryNotFoundException)
+            {
+                // No parent directory also means no saved lap to clear.
+            }
+        }
+
         public void Save(BestLapData data)
         {
             if (!BestLapRepository.IsValid(data, _checkpointCount, _trackId))

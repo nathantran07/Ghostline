@@ -140,6 +140,59 @@ namespace Ghostline.Tests.EditMode.Storage
             }
         }
 
+        [Test]
+        public void ClearDeletesSavedFileAndNextSlowerLapRoundTrips()
+        {
+            var repository = new BestLapRepository(new JsonFileBestLapStorage(_path, 2), 2);
+            repository.TrySave(CreateLap(2f));
+            repository.ClearBest();
+            Assert.That(File.Exists(_path), Is.False);
+            Assert.That(repository.Load(), Is.Null);
+            Assert.That(repository.TrySave(CreateLap(8f)), Is.True);
+            Assert.That(repository.Load().LapTime, Is.EqualTo(8f));
+        }
+
+        [Test]
+        public void ClearMissingFileOrDirectorySucceedsWithoutLogs()
+        {
+            var storage = new JsonFileBestLapStorage(_path, 2);
+            Assert.DoesNotThrow(() => storage.Clear());
+            Assert.DoesNotThrow(() => new JsonFileBestLapStorage(
+                Path.Combine(_directory, "missing", "best.json"), 2).Clear());
+            UnityEngine.TestTools.LogAssert.NoUnexpectedReceived();
+        }
+
+        [Test]
+        public void LockedFileClearThrowsAndPreservesSavedBytes()
+        {
+            var storage = new JsonFileBestLapStorage(_path, 2);
+            storage.Save(CreateLap(2f));
+            string original = File.ReadAllText(_path);
+            using (new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read))
+                Assert.Throws<IOException>(() => storage.Clear());
+            Assert.That(File.ReadAllText(_path), Is.EqualTo(original));
+            Assert.That(storage.Load().LapTime, Is.EqualTo(2f));
+        }
+
+        [Test]
+        public void ReadOnlyFileClearThrowsAndPreservesSavedBytes()
+        {
+            var storage = new JsonFileBestLapStorage(_path, 2);
+            storage.Save(CreateLap(2f));
+            string original = File.ReadAllText(_path);
+            File.SetAttributes(_path, FileAttributes.ReadOnly);
+            try
+            {
+                Assert.Throws<UnauthorizedAccessException>(() => storage.Clear());
+                Assert.That(File.ReadAllText(_path), Is.EqualTo(original));
+                Assert.That(storage.Load().LapTime, Is.EqualTo(2f));
+            }
+            finally
+            {
+                File.SetAttributes(_path, FileAttributes.Normal);
+            }
+        }
+
         private static BestLapData CreateLap(float duration)
         {
             return new BestLapData
