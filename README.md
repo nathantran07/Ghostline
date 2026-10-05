@@ -6,7 +6,7 @@ A top-down Unity 2D time-trial game with a Suzuka-inspired circuit and a ghost r
 
 [Watch the demo video (with sound)](https://youtu.be/h-XSCS6nqCQ)
 
-**Build placeholder:** Download a playable build (GitHub Release link goes here).
+[Download the playable Windows build (v1.1)](https://github.com/nathantran07/Ghostline/releases/tag/v1.1)
 
 ## Features
 
