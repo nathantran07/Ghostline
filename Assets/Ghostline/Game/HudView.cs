@@ -18,6 +18,7 @@ namespace Ghostline.Game
         private const float ClearBestMessageSeconds = 2f;
         private ClearBestLapFlow _clearBestFlow;
         private ClearBestLapView _clearBestView;
+        private QuitFlow _quitFlow;
         private string _clearBestMessage;
         private float _clearBestMessageSecondsRemaining;
         private StartGantryView _startGantry;
@@ -84,6 +85,12 @@ namespace Ghostline.Game
             RefreshClearBestView();
         }
 
+        public void RenderQuit(QuitFlow flow)
+        {
+            _quitFlow = flow;
+            RefreshClearBestView();
+        }
+
         public void ShowClearBestResult(bool cleared)
         {
             _clearBestMessage = cleared ? "Best lap cleared" : "Could not clear best lap (see Console)";
@@ -99,10 +106,11 @@ namespace Ghostline.Game
 
         private void RefreshClearBestView()
         {
+            bool quitOpen = _quitFlow != null && _quitFlow.State == QuitState.AwaitingConfirm;
             string message = _clearBestMessageSecondsRemaining > 0f ? _clearBestMessage : null;
             if (_clearBestView == null)
             {
-                if ((_clearBestFlow == null || _clearBestFlow.State == ClearBestLapState.Idle) && message == null)
+                if ((_clearBestFlow == null || _clearBestFlow.State == ClearBestLapState.Idle) && message == null && !quitOpen)
                     return;
                 Canvas canvas = _statusText != null ? _statusText.canvas : GetComponentInParent<Canvas>();
                 if (canvas == null)
@@ -113,7 +121,7 @@ namespace Ghostline.Game
                 _clearBestView = overlay.GetComponent<ClearBestLapView>();
                 _clearBestView.Initialize(canvas, _statusText != null ? _statusText.font : TMP_Settings.defaultFontAsset);
             }
-            _clearBestView.Render(_clearBestFlow, message);
+            _clearBestView.Render(_clearBestFlow, message, quitOpen);
         }
 
         private void OnDestroy()
@@ -135,7 +143,7 @@ namespace Ghostline.Game
             if (_statusText == null)
                 return;
             if (session.Timer.State == LapTimerState.NotStarted)
-                _statusText.text = "Cross the white line to start | WASD / arrows | R: restart";
+                _statusText.text = "Cross the white line to start | WASD / arrows | R: restart | Esc: quit";
             else if (session.Timer.State == LapTimerState.Finished)
                 _statusText.text = saveFailed ? "Lap complete; save failed (see Console) | R: restart"
                     : "Lap complete | R: restart";

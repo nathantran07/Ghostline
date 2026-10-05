@@ -70,6 +70,28 @@ namespace Ghostline.Tests.Scene
                 Assert.That(backing.r, Is.LessThan(0.1f));
                 Color border = panel.Find("Border Top").GetComponent<Image>().color;
                 Assert.That(border.r > border.g && border.g > border.b, Is.True);
+
+                var quit = new QuitFlow();
+                quit.Tick(true, false, false, true);
+                hud.RenderQuit(quit);
+                hud.RenderQuit(quit);
+                Canvas.ForceUpdateCanvases();
+                RectTransform quitPanel = (RectTransform)view.transform.Find("Quit");
+                Assert.That(root.GetComponentsInChildren<ClearBestLapView>(true), Has.Length.EqualTo(1));
+                Assert.That(quitPanel.gameObject.activeSelf, Is.True);
+                Assert.That(panel.gameObject.activeSelf, Is.False);
+                Assert.That(quitPanel.anchorMin, Is.EqualTo(Vector2.one * 0.5f));
+                Assert.That(quitPanel.localScale, Is.EqualTo(panel.localScale));
+                Assert.That(quitPanel.Find("Backing").GetComponent<Image>().color, Is.EqualTo(backing));
+                Assert.That(quitPanel.Find("Border Top").GetComponent<Image>().color, Is.EqualTo(border));
+                Assert.That(quitPanel.Find("Title").GetComponent<TMP_Text>().fontSize, Is.EqualTo(title.fontSize));
+                bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root.transform, quitPanel);
+                Assert.That(bounds.center.x, Is.EqualTo(0f).Within(0.01f));
+                Assert.That(bounds.center.y, Is.EqualTo(0f).Within(0.01f));
+                Assert.That(bounds.min.x, Is.GreaterThanOrEqualTo(-width * 0.5f));
+                Assert.That(bounds.max.x, Is.LessThanOrEqualTo(width * 0.5f));
+                Assert.That(bounds.min.y, Is.GreaterThanOrEqualTo(-height * 0.5f));
+                Assert.That(bounds.max.y, Is.LessThanOrEqualTo(height * 0.5f));
             }
             finally
             {
@@ -120,6 +142,19 @@ namespace Ghostline.Tests.Scene
                 Export("ClearBestSuccess.png", camera, target, image);
                 hud.ShowClearBestResult(false);
                 Export("ClearBestWarning.png", camera, target, image);
+                var quit = new QuitFlow();
+                quit.Tick(true, false, false, true);
+                hud.RenderQuit(quit);
+                Export("QuitConfirm.png", camera, target, image);
+                Transform overlay = hud.transform.Find("Clear Best Lap Overlay");
+                Assert.That(overlay.Find("Result").gameObject.activeSelf, Is.False);
+                RectTransform quitBorder = overlay.Find("Quit/Border Bottom").GetComponent<RectTransform>();
+                Vector3 borderPixel = camera.WorldToScreenPoint(quitBorder.TransformPoint(Vector3.zero));
+                Color renderedBorder = image.GetPixel(Mathf.RoundToInt(borderPixel.x), Mathf.RoundToInt(borderPixel.y));
+                Assert.That(renderedBorder.r, Is.GreaterThan(0.8f), "The quit panel border must render amber.");
+                quit.Tick(false, false, true, true);
+                hud.RenderQuit(quit);
+                Assert.That(overlay.Find("Quit").gameObject.activeSelf, Is.False);
                 hud.TickClearBestMessage(2f);
                 Assert.That(hud.transform.Find("Clear Best Lap Overlay/Result").gameObject.activeSelf, Is.False);
             }

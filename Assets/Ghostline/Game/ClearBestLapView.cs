@@ -5,13 +5,14 @@ using UnityEngine.UI;
 
 namespace Ghostline.Game
 {
-    /// <summary>Noninteractive clear-best feedback on the existing HUD canvas.</summary>
+    /// <summary>Noninteractive confirmation prompts and clear-best feedback on the existing HUD canvas.</summary>
     public sealed class ClearBestLapView : MonoBehaviour
     {
         private static readonly Color Amber = new Color(1f, 0.67f, 0.2f, 1f);
         private RectTransform _hold;
         private RectTransform _confirmation;
         private RectTransform _result;
+        private RectTransform _quit;
         private Image _holdFill;
         private Image _timeoutFill;
         private TMP_Text _resultText;
@@ -54,18 +55,26 @@ namespace Ghostline.Game
                 new Vector2(0f, -17f), new Vector2(600f, 40f));
             _timeoutFill = CreateBar(_confirmation, "Timeout", new Vector2(592f, 6f), -65f);
 
+            _quit = CreatePanel("Quit", new Vector2(640f, 180f));
+            _quit.anchorMin = _quit.anchorMax = Vector2.one * 0.5f;
+            CreateText(_quit, "Title", "Quit Ghostline?", font, 34f,
+                new Vector2(0f, 40f), new Vector2(600f, 50f));
+            CreateText(_quit, "Keys", "[Y] Quit    [N / Esc] Resume", font, 26f,
+                new Vector2(0f, -17f), new Vector2(600f, 40f));
+
             _result = CreatePanel("Result", new Vector2(640f, 100f));
             _resultText = CreateText(_result, "Message", string.Empty, font, 28f,
                 Vector2.zero, new Vector2(600f, 70f));
             Render(null, null);
         }
 
-        public void Render(ClearBestLapFlow flow, string resultMessage)
+        public void Render(ClearBestLapFlow flow, string resultMessage, bool quitOpen = false)
         {
             ClearBestLapState state = flow == null ? ClearBestLapState.Idle : flow.State;
-            _hold.gameObject.SetActive(state == ClearBestLapState.Holding);
-            _confirmation.gameObject.SetActive(state == ClearBestLapState.AwaitingConfirm);
-            _result.gameObject.SetActive(state == ClearBestLapState.Idle && resultMessage != null);
+            _quit.gameObject.SetActive(quitOpen);
+            _hold.gameObject.SetActive(!quitOpen && state == ClearBestLapState.Holding);
+            _confirmation.gameObject.SetActive(!quitOpen && state == ClearBestLapState.AwaitingConfirm);
+            _result.gameObject.SetActive(!quitOpen && state == ClearBestLapState.Idle && resultMessage != null);
             _holdFill.fillAmount = flow == null ? 0f : flow.HoldProgress;
             _timeoutFill.fillAmount = flow == null ? 0f : flow.TimeoutFraction;
             _resultText.text = resultMessage ?? string.Empty;
@@ -83,7 +92,7 @@ namespace Ghostline.Game
             Rect viewport = ((RectTransform)transform).rect;
             // Keep the entire panel below the top-right minimap, including on short canvases.
             float scale = Mathf.Min(1f, viewport.width * 0.9f / 640f, viewport.height * 0.2f / 180f);
-            _hold.localScale = _confirmation.localScale = _result.localScale = Vector3.one * scale;
+            _hold.localScale = _confirmation.localScale = _result.localScale = _quit.localScale = Vector3.one * scale;
         }
 
         private RectTransform CreatePanel(string name, Vector2 size)

@@ -26,7 +26,7 @@ namespace Ghostline.Game
         private BestLapRepository _repository;
         private BestLapData _bestLap;
         private bool _saveFailed;
-        private ClearBestLapFlow _clearBestFlow;
+        private ConfirmationPrompts _prompts;
         private readonly StartSequence _startSequence = new StartSequence();
 
         public int CheckpointCount => _session == null ? _checkpointCount : _session.Checkpoints.CheckpointCount;
@@ -95,24 +95,26 @@ namespace Ghostline.Game
                 return;
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
                 Restart();
-            UpdateClearBest(Time.unscaledDeltaTime);
+            UpdatePrompts(Time.unscaledDeltaTime);
             if (_session.Timer.State == LapTimerState.Running)
                 _ghost.ShowAt(_session.Timer.ElapsedTime);
             _hud.Render(_session, _bestLap, _saveFailed);
             _hud.RenderCountdown(_startSequence);
         }
 
-        private void UpdateClearBest(float deltaTime)
+        private void UpdatePrompts(float deltaTime)
         {
-            if (_clearBestFlow == null)
-                _clearBestFlow = new ClearBestLapFlow(_clearBestHoldDuration, _clearBestConfirmTimeout);
+            if (_prompts == null)
+                _prompts = new ConfirmationPrompts(new ClearBestLapFlow(_clearBestHoldDuration, _clearBestConfirmTimeout));
             _hud.TickClearBestMessage(deltaTime);
             Keyboard keyboard = Keyboard.current;
-            bool clear = _clearBestFlow.Tick(deltaTime,
+            bool clear = _prompts.Tick(deltaTime,
                 keyboard != null && keyboard.deleteKey.isPressed,
+                keyboard != null && keyboard.escapeKey.wasPressedThisFrame,
                 keyboard != null && keyboard.yKey.wasPressedThisFrame,
-                keyboard != null && (keyboard.nKey.wasPressedThisFrame || keyboard.escapeKey.wasPressedThisFrame));
-            _hud.RenderClearBest(_clearBestFlow);
+                keyboard != null && keyboard.nKey.wasPressedThisFrame);
+            _hud.RenderQuit(_prompts.Quit);
+            _hud.RenderClearBest(_prompts.ClearBest);
             if (!clear)
                 return;
             try

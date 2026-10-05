@@ -223,6 +223,142 @@ namespace Ghostline.Tests.Scene
             }
         }
 
+        [TestCase(Key.N)]
+        [TestCase(Key.Escape)]
+        public void PlayerQuitPromptResumesWithoutChangingAttemptOrGhost(Key cancel)
+        {
+            using (var rig = new Rig(player: true))
+            {
+                float elapsed = rig.Session.Timer.ElapsedTime;
+                Vector2 velocity = rig.Car.Body.linearVelocity;
+                rig.Step(0f, Key.Escape);
+                rig.AssertQuitPrompt(true);
+                Assert.That(rig.Session.Timer.ElapsedTime, Is.EqualTo(elapsed));
+                Assert.That(rig.Car.Body.linearVelocity, Is.EqualTo(velocity));
+                Vector3 ghostPosition = rig.Ghost.transform.position;
+                rig.Step(0f);
+                Invoke(rig.Race, "FixedUpdate");
+                Invoke(rig.Race, "Update");
+                Assert.That(rig.Ghost.transform.position.x, Is.GreaterThan(ghostPosition.x));
+                rig.Race.CrossTrigger(rig.Car, false, 0);
+                Assert.That(rig.Session.Timer.ElapsedTime, Is.GreaterThan(elapsed));
+                Assert.That(rig.Session.Checkpoints.NextCheckpointIndex, Is.EqualTo(1));
+                Assert.That(rig.Car.CanDrive && rig.Car.InputEnabled, Is.True);
+                rig.Step(600f);
+                rig.AssertQuitPrompt(true);
+                rig.Step(0f, cancel);
+                rig.AssertQuitPrompt(false);
+                Assert.That(rig.QuitRequests, Is.Zero);
+                Assert.That(rig.Storage.ClearCount, Is.Zero);
+                Assert.That(rig.Ghost.HasRecording && rig.GhostRenderer.enabled && rig.GhostDot.enabled, Is.True);
+            }
+        }
+
+        [Test]
+        public void PlayerConfirmationInvokesQuitCallbackOnce()
+        {
+            using (var rig = new Rig(player: true))
+            {
+                rig.Step(0f, Key.Escape);
+                rig.Step(0f, Key.Y);
+                rig.AssertQuitPrompt(false);
+                Assert.That(rig.QuitRequests, Is.EqualTo(1));
+                rig.Step(0f);
+                rig.Step(0f, Key.Y);
+                Assert.That(rig.QuitRequests, Is.EqualTo(1));
+                Assert.That(rig.Storage.ClearCount, Is.Zero);
+            }
+        }
+
+        [TestCase(Key.W)]
+        [TestCase(Key.A)]
+        [TestCase(Key.S)]
+        [TestCase(Key.D)]
+        [TestCase(Key.UpArrow)]
+        [TestCase(Key.DownArrow)]
+        [TestCase(Key.LeftArrow)]
+        [TestCase(Key.RightArrow)]
+        [TestCase(Key.R)]
+        public void DrivingAndRestartKeysDoNotDismissQuitPrompt(Key key)
+        {
+            using (var rig = new Rig(player: true))
+            {
+                rig.Step(0f, Key.Escape);
+                rig.Keys(key);
+                Invoke(rig.Race, "Update");
+                rig.AssertQuitPrompt(true);
+                Assert.That(rig.QuitRequests, Is.Zero);
+                if (key == Key.R)
+                    Assert.That(rig.Session.Timer.State, Is.EqualTo(LapTimerState.NotStarted));
+            }
+        }
+
+        [Test]
+        public void EditorEscapeNeverCreatesQuitPromptOrRequestsQuit()
+        {
+            using (var rig = new Rig())
+            {
+                rig.Step(0f, Key.Escape);
+                rig.Step(0f, Key.Y);
+                Assert.That(rig.Root.transform.Find("Clear Best Lap Overlay"), Is.Null);
+                Assert.That(rig.Session.Timer.State, Is.EqualTo(LapTimerState.Running));
+                var prompts = new ConfirmationPrompts(new ClearBestLapFlow(), () => rig.QuitRequests++);
+                prompts.Tick(0f, false, true, false, false);
+                prompts.Tick(0f, false, false, true, false);
+                Assert.That(prompts.Quit.State, Is.EqualTo(QuitState.Idle));
+                Assert.That(rig.QuitRequests, Is.Zero);
+            }
+        }
+
+        [Test]
+        public void ClearPromptConsumesEscapeAndBothPromptsStayExclusive()
+        {
+            using (var rig = new Rig(player: true))
+            {
+                rig.Step(1f, Key.Delete);
+                rig.AssertPrompt(true);
+                rig.Step(0f, Key.Escape);
+                rig.AssertPrompt(false);
+                rig.AssertQuitPrompt(false);
+                rig.Step(0f);
+                rig.Step(0f, Key.Escape);
+                rig.AssertQuitPrompt(true);
+                rig.Step(2f, Key.Delete);
+                rig.AssertQuitPrompt(true);
+                rig.AssertPrompt(false);
+                rig.Step(0f, Key.N, Key.Delete);
+                rig.AssertQuitPrompt(false);
+                rig.AssertPrompt(false);
+                rig.Step(1f, Key.Delete);
+                rig.AssertPrompt(true);
+                rig.AssertQuitPrompt(false);
+                Assert.That(rig.Storage.ClearCount, Is.Zero);
+            }
+        }
+
+        [Test]
+        public void SimultaneousDeleteHoldAndEscapePreferClearPrompt()
+        {
+            using (var rig = new Rig(player: true))
+            {
+                rig.Step(1f, Key.Delete, Key.Escape);
+                rig.AssertPrompt(true);
+                rig.AssertQuitPrompt(false);
+                Assert.That(rig.QuitRequests, Is.Zero);
+            }
+        }
+
+        [Test]
+        public void ControlsHintIncludesQuitWithoutSceneChanges()
+        {
+            using (var rig = new Rig())
+            {
+                rig.Race.Restart();
+                rig.Hud.Render(rig.Session, rig.Storage.Data, false);
+                Assert.That(rig.Status.text, Does.Contain("WASD / arrows | R: restart | Esc: quit"));
+            }
+        }
+
         private static void Invoke(object target, string method, params object[] arguments)
         {
             MethodInfo info = target.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic);
@@ -269,8 +405,9 @@ namespace Ghostline.Tests.Scene
             internal readonly TMP_Text Delta;
             internal readonly Image GhostDot;
             private readonly MinimapView _minimap;
+            internal int QuitRequests;
 
-            internal Rig(bool hasBest = true)
+            internal Rig(bool hasBest = true, bool player = false)
             {
                 Root.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
                 CanvasScaler scaler = Root.GetComponent<CanvasScaler>();
@@ -289,6 +426,9 @@ namespace Ghostline.Tests.Scene
                 Hud.Configure(Text("Current"), Best, Status, deltaText: Delta);
                 Race = Root.AddComponent<RaceManager>();
                 Race.Configure(Car, Ghost, Hud, null, 1);
+                if (player)
+                    Set(Race, "_prompts", new ConfirmationPrompts(new ClearBestLapFlow(),
+                        () => QuitRequests++, () => false));
                 Storage.Data = hasBest ? new BestLapData
                 {
                     Version = BestLapData.CurrentVersion,
@@ -333,7 +473,7 @@ namespace Ghostline.Tests.Scene
             internal void Step(float seconds, params Key[] keys)
             {
                 Keys(keys);
-                Invoke(Race, "UpdateClearBest", seconds);
+                Invoke(Race, "UpdatePrompts", seconds);
                 var best = (BestLapData)typeof(RaceManager).GetField("_bestLap",
                     BindingFlags.Instance | BindingFlags.NonPublic).GetValue(Race);
                 Hud.Render(Session, best, false);
@@ -344,6 +484,18 @@ namespace Ghostline.Tests.Scene
             internal GameObject Panel(string path) => Root.transform.Find("Clear Best Lap Overlay/" + path).gameObject;
 
             internal Image Fill(string path) => Panel(path).GetComponent<Image>();
+
+            internal void AssertQuitPrompt(bool visible)
+            {
+                Assert.That(Panel("Quit").activeSelf, Is.EqualTo(visible));
+                if (!visible)
+                    return;
+                Assert.That(Panel("Quit/Title").GetComponent<TMP_Text>().text, Is.EqualTo("Quit Ghostline?"));
+                Assert.That(Panel("Quit/Keys").GetComponent<TMP_Text>().text, Is.EqualTo("[Y] Quit    [N / Esc] Resume"));
+                Assert.That(Panel("Quit").GetComponent<RectTransform>().anchorMin, Is.EqualTo(Vector2.one * 0.5f));
+                Assert.That(Panel("Hold").activeSelf || Panel("Confirmation").activeSelf || Panel("Result").activeSelf, Is.False);
+                Assert.That(Panel("Quit").transform.Find("Timeout"), Is.Null);
+            }
 
             internal void AssertPrompt(bool visible)
             {

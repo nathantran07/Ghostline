@@ -284,7 +284,7 @@ namespace Ghostline.Editor
             TMP_Text best = CreateText("Best Lap", canvasObject.transform, new Vector2(24f, -68f),
                 28f, "Best  --");
             TMP_Text status = CreateText("Status", canvasObject.transform, new Vector2(24f, -112f),
-                22f, "Cross the white line to start | WASD / arrows | R: restart");
+                22f, "Cross the white line to start | WASD / arrows | R: restart | Esc: quit");
             TMP_Text countdown = CreateText("Countdown", canvasObject.transform, Vector2.zero, 96f, "3");
             RectTransform countdownRectangle = countdown.rectTransform;
             countdownRectangle.anchorMin = new Vector2(0.5f, 0.5f);

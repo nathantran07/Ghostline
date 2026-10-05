@@ -35,11 +35,14 @@ A top-down Unity 2D time-trial game with a Suzuka-inspired circuit and a ghost r
 | D / Right | Steer right |
 | R | Restart the attempt and start sequence; retain the saved best lap |
 | Delete (hold 1 second) | Open the clear-best confirmation prompt; releasing early cancels the hold |
-| Y | Confirm clearing the saved best lap and ghost while the prompt is open |
-| N / Esc | Cancel the clear-best prompt; it also cancels automatically after 5 seconds |
+| Esc | In a built player, open the quit prompt; cancel an open clear-best prompt first. Does not open quit in the Unity editor |
+| Y | Confirm the open prompt: clear the saved best lap and ghost, or quit the application |
+| N / Esc | Close the open prompt and continue; the clear-best prompt also cancels automatically after 5 seconds |
 | M | Mute or unmute player audio |
 
 Holding Delete shows a progress bar near the center of the screen. Once the prompt opens, a thin bar shows the remaining confirmation time. Success or failure appears as a brief centered message. The attempt continues underneath, and a failed delete keeps the saved best and ghost.
+
+In a built player, Esc opens "Quit Ghostline?" with "[Y] Quit    [N / Esc] Resume". It has no timeout. Only one prompt can be open at a time, and neither pauses the attempt, lap clock, or ghost. Driving keys and R do not confirm or dismiss the quit prompt; R still restarts the attempt. Esc never opens quit or stops Play mode in the Unity editor.
 
 Use **Unity 6000.6.4f1**, as recorded in `ProjectSettings/ProjectVersion.txt`. The project uses the **Universal 2D template** and includes its package and rendering settings.
 
@@ -71,7 +74,7 @@ The supplied project uses **Input System Package (New)**. If changing project se
 
 ## Testing
 
-The suite contains **475 EditMode test cases**. Open **Window > General > Test Runner > EditMode > Run All**. Some scene-builder and Play integration cases require batch mode and are skipped in an interactive run; use the command below for the complete suite. Graphics must remain enabled because several tests render previews.
+The suite contains **501 EditMode test cases**. Open **Window > General > Test Runner > EditMode > Run All**. Some scene-builder and Play integration cases require batch mode and are skipped in an interactive run; use the command below for the complete suite. Graphics must remain enabled because several tests render previews.
 
 From the project root in PowerShell, using the default Windows Unity Hub installation path:
 
@@ -85,7 +88,7 @@ From the project root in PowerShell, using the default Windows Unity Hub install
 
 Adjust the Editor path for your installation. Run this in a disposable project copy to keep generated previews and scene-building checks separate from your working scene. Do not add `-nographics`.
 
-Tests cover timing and checkpoint rules, replay interpolation, save validation and compatibility, best-lap clearing and confirmation controls, driving calculations, start sequencing and deltas, minimap projection and wiring, generated track/decor clearance, scene installers, car and gantry rendering, and synthesized audio.
+Tests cover timing and checkpoint rules, replay interpolation, save validation and compatibility, best-lap clearing, quit confirmation and editor gating, mutually exclusive prompts, driving calculations, start sequencing and deltas, minimap projection and wiring, generated track/decor clearance, scene installers, car and gantry rendering, and synthesized audio.
 
 ## Credits
 
